@@ -24,7 +24,10 @@ class User(Base):
     role = Column(Enum(UserRole), nullable=False, default=UserRole.student)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    face_embedding = relationship(
-        "FaceEmbedding", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    # A user now has one embedding per enrolled pose (CENTER/LEFT/RIGHT/UP/DOWN),
+    # so this is a list. Accounts enrolled before multi-pose support have a
+    # single CENTER entry.
+    face_embeddings = relationship(
+        "FaceEmbedding", back_populates="user", cascade="all, delete-orphan"
     )
     attempts = relationship("ExamAttempt", back_populates="user", cascade="all, delete-orphan")

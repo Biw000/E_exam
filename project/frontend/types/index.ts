@@ -58,12 +58,25 @@ export interface Attempt {
   answers: SavedAnswer[];
 }
 
+export type EventSeverity = "INFO" | "WARNING" | "SUSPICIOUS";
+
 export interface SuspiciousEvent {
   id: string;
   event_type: string;
+  severity: EventSeverity;
   confidence: number | null;
   description: string | null;
+  event_metadata: Record<string, unknown> | null;
   created_at: string;
+}
+
+export type FacePose = "CENTER" | "LEFT" | "RIGHT" | "UP" | "DOWN";
+
+export interface EnrollmentStatus {
+  enrolled_poses: string[];
+  required_poses: string[];
+  missing_poses: string[];
+  complete: boolean;
 }
 
 export interface MyResult {
