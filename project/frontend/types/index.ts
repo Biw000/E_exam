@@ -33,6 +33,42 @@ export interface ExamListItem {
   start_time: string;
   end_time: string;
   status: ExamStatus;
+  subject_id: string | null;
+  subject_name: string | null;
+  passing_percentage: number;
+}
+
+export interface Subject {
+  id: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+  created_at: string;
+  exam_count: number;
+}
+
+export interface ScoreBucket {
+  label: string;
+  count: number;
+}
+
+export interface ExamStats {
+  exam_id: string;
+  exam_title: string;
+  subject_name: string | null;
+  total_score: number;
+  passing_percentage: number;
+  participants: number;
+  submitted: number;
+  in_progress: number;
+  average_score: number | null;
+  average_percentage: number | null;
+  highest_score: number | null;
+  lowest_score: number | null;
+  passed: number;
+  failed: number;
+  pass_rate: number | null;
+  distribution: ScoreBucket[];
 }
 
 export interface ExamDetail extends ExamListItem {

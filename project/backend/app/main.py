@@ -4,7 +4,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import Base, engine
 from app import models  # noqa: F401  (ensures all models are registered on Base.metadata)
-from app.routers import auth, face, exams, questions, attempts, anti_cheat, results, admin
+from app.routers import (
+    auth,
+    face,
+    exams,
+    subjects,
+    questions,
+    attempts,
+    anti_cheat,
+    results,
+    admin,
+)
 
 # Create tables on startup if they don't exist yet. For a 4-day MVP this
 # replaces a full Alembic migration workflow; Alembic is still included in
@@ -24,6 +34,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(face.router)
 app.include_router(exams.router)
+app.include_router(subjects.router)
 app.include_router(questions.router)
 app.include_router(attempts.router)
 app.include_router(anti_cheat.router)

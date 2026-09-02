@@ -23,6 +23,11 @@ Changes applied:
                                       ALTER TYPE migration every time
   4. suspicious_events.severity     - new column (INFO / WARNING / SUSPICIOUS)
   5. suspicious_events.event_metadata - new JSONB column for head pose data etc.
+  6. subjects                       - new table, so exams can be grouped by
+                                      course/subject instead of one flat list
+  7. exams.subject_id               - link to a subject (nullable: existing
+                                      exams stay valid and ungrouped)
+  8. exams.passing_percentage       - pass mark used for the results summary
 """
 import sys
 
@@ -63,7 +68,7 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 1. face_embeddings.pose_type
         # ------------------------------------------------------------------
-        log("1/5  face_embeddings.pose_type")
+        log("1/8  face_embeddings.pose_type")
         conn.execute(
             text(
                 "ALTER TABLE face_embeddings "
@@ -75,7 +80,7 @@ def migrate() -> None:
         # 2. Drop UNIQUE(user_id), add UNIQUE(user_id, pose_type)
         #    The old constraint name is auto-generated, so look it up.
         # ------------------------------------------------------------------
-        log("2/5  face_embeddings unique constraint")
+        log("2/8  face_embeddings unique constraint")
         old_constraints = conn.execute(
             text(
                 """
@@ -122,7 +127,7 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 3. suspicious_events.event_type : ENUM -> VARCHAR(50)
         # ------------------------------------------------------------------
-        log("3/5  suspicious_events.event_type -> varchar")
+        log("3/8  suspicious_events.event_type -> varchar")
         current_type = conn.execute(
             text(
                 "SELECT data_type FROM information_schema.columns "
@@ -152,7 +157,7 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 4. suspicious_events.severity
         # ------------------------------------------------------------------
-        log("4/5  suspicious_events.severity")
+        log("4/8  suspicious_events.severity")
         conn.execute(
             text(
                 "ALTER TABLE suspicious_events "
@@ -183,7 +188,7 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 5. suspicious_events.event_metadata
         # ------------------------------------------------------------------
-        log("5/5  suspicious_events.event_metadata")
+        log("5/8  suspicious_events.event_metadata")
         conn.execute(
             text("ALTER TABLE suspicious_events ADD COLUMN IF NOT EXISTS event_metadata JSONB")
         )
@@ -194,6 +199,64 @@ def migrate() -> None:
                 "ON suspicious_events (severity)"
             )
         )
+
+        # ------------------------------------------------------------------
+        # 6. subjects table
+        # ------------------------------------------------------------------
+        log("6/8  subjects table")
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS subjects (
+                    id UUID PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    code VARCHAR(50),
+                    description TEXT,
+                    created_at TIMESTAMP NOT NULL DEFAULT (now() AT TIME ZONE 'utc')
+                )
+                """
+            )
+        )
+        conn.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS uq_subjects_name ON subjects (name)")
+        )
+
+        # ------------------------------------------------------------------
+        # 7. exams.subject_id
+        #    Nullable on purpose: exams created before subjects existed stay
+        #    usable and simply show up as "ไม่ระบุวิชา".
+        # ------------------------------------------------------------------
+        log("7/8  exams.subject_id")
+        conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS subject_id UUID"))
+        has_fk = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                "WHERE table_name = 'exams' AND constraint_name = 'fk_exams_subject_id'"
+            )
+        ).scalar()
+        if not has_fk:
+            conn.execute(
+                text(
+                    "ALTER TABLE exams ADD CONSTRAINT fk_exams_subject_id "
+                    "FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE SET NULL"
+                )
+            )
+            log("     added foreign key")
+        conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_exams_subject_id ON exams (subject_id)")
+        )
+
+        # ------------------------------------------------------------------
+        # 8. exams.passing_percentage
+        # ------------------------------------------------------------------
+        log("8/8  exams.passing_percentage")
+        conn.execute(
+            text(
+                "ALTER TABLE exams ADD COLUMN IF NOT EXISTS "
+                "passing_percentage DOUBLE PRECISION NOT NULL DEFAULT 50"
+            )
+        )
+
 
 
 if __name__ == "__main__":

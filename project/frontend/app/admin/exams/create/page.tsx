@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { api, ApiError } from "@/lib/api";
+import { Subject } from "@/types";
 import { localInputToUtcIso, utcIsoToLocalInput } from "@/lib/datetime";
 
 interface ExamAdminDetail {
@@ -19,6 +20,18 @@ export default function CreateExamPage() {
   const [endTime, setEndTime] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectId, setSubjectId] = useState("");
+  const [passingPercentage, setPassingPercentage] = useState(50);
+
+  useEffect(() => {
+    api
+      .get<Subject[]>("/api/subjects")
+      .then(setSubjects)
+      .catch(() => {
+        /* an exam without a subject is still valid */
+      });
+  }, []);
 
   /**
    * The end time follows start + duration automatically, because an exam whose
@@ -89,6 +102,8 @@ export default function CreateExamPage() {
         duration,
         start_time: localInputToUtcIso(startTime),
         end_time: localInputToUtcIso(endTime),
+        subject_id: subjectId || null,
+        passing_percentage: passingPercentage,
       });
       router.push(`/admin/exams/${created.id}`);
     } catch (err) {
@@ -115,6 +130,34 @@ export default function CreateExamPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">วิชา</label>
+              <select
+                className="input mt-1"
+                value={subjectId}
+                onChange={(e) => setSubjectId(e.target.value)}
+              >
+                <option value="">ไม่ระบุวิชา</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code ? `${s.code} — ${s.name}` : s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">เกณฑ์ผ่าน (%)</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                className="input mt-1"
+                value={passingPercentage}
+                onChange={(e) => setPassingPercentage(Number(e.target.value))}
+              />
+            </div>
           </div>
           <div>
             <label className="text-sm font-medium">ระยะเวลา (นาที)</label>

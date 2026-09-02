@@ -12,3 +12,4 @@ from app.models.suspicious_event import (  # noqa: F401
     EventSeverity,
     resolve_severity,
 )
+from app.models.subject import Subject  # noqa: F401

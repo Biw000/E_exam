@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, Boolean, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, DateTime, Text, Boolean, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -19,6 +19,15 @@ class Exam(Base):
     end_time = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+    subject_id = Column(
+        UUID(as_uuid=True), ForeignKey("subjects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # Percentage of the total score a student must reach to be counted as
+    # passing in the results summary. Purely for reporting - it never blocks
+    # anyone from taking or submitting the exam.
+    passing_percentage = Column(Float, nullable=False, default=50.0)
+
+    subject = relationship("Subject", back_populates="exams")
     questions = relationship(
         "Question", back_populates="exam", cascade="all, delete-orphan", order_by="Question.order"
     )

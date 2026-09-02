@@ -28,12 +28,20 @@ def _to_list_response(exam: Exam) -> ExamListResponse:
         start_time=exam.start_time,
         end_time=exam.end_time,
         status=get_exam_status(exam),
+        subject_id=exam.subject_id,
+        subject_name=exam.subject.name if exam.subject else None,
+        passing_percentage=exam.passing_percentage or 50.0,
     )
 
 
 @router.get("", response_model=list[ExamListResponse])
 def list_exams(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    exams = db.query(Exam).order_by(Exam.start_time.desc()).all()
+    exams = (
+        db.query(Exam)
+        .options(joinedload(Exam.subject))
+        .order_by(Exam.start_time.desc())
+        .all()
+    )
     return [_to_list_response(e) for e in exams]
 
 

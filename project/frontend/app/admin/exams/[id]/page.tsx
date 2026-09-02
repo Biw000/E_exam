@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import { api, ApiError } from "@/lib/api";
-import { ExamDetail, Question } from "@/types";
+import { ExamDetail, Question, Subject } from "@/types";
 import {
   formatDateTime,
   localInputToUtcIso,
@@ -36,6 +37,9 @@ export default function AdminExamDetailPage() {
   const [duration, setDuration] = useState(30);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectId, setSubjectId] = useState("");
+  const [passingPercentage, setPassingPercentage] = useState(50);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
 
@@ -54,6 +58,8 @@ export default function AdminExamDetailPage() {
       setDuration(data.duration);
       setStartTime(utcIsoToLocalInput(data.start_time));
       setEndTime(utcIsoToLocalInput(data.end_time));
+      setSubjectId(data.subject_id ?? "");
+      setPassingPercentage(data.passing_percentage ?? 50);
       setError(null);
     } catch (err) {
       setError(
@@ -68,6 +74,15 @@ export default function AdminExamDetailPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    api
+      .get<Subject[]>("/api/subjects")
+      .then(setSubjects)
+      .catch(() => {
+        /* subject list is optional */
+      });
+  }, []);
 
   async function patchExam(body: Record<string, unknown>, message: string) {
     setSavingSettings(true);
@@ -99,6 +114,8 @@ export default function AdminExamDetailPage() {
         duration,
         start_time: localInputToUtcIso(startTime),
         end_time: localInputToUtcIso(endTime),
+        subject_id: subjectId || null,
+        passing_percentage: passingPercentage,
       },
       "บันทึกการตั้งค่าแล้ว"
     );
@@ -199,10 +216,13 @@ export default function AdminExamDetailPage() {
                 <p className="mt-1 text-sm text-slate-600">{exam.description}</p>
               )}
               <p className="mt-1 text-sm text-slate-500">
-                {exam.duration} นาที · {formatDateTime(exam.start_time)} —{" "}
+                {exam.subject_name ?? "ไม่ระบุวิชา"} · {exam.duration} นาที · {formatDateTime(exam.start_time)} —{" "}
                 {formatDateTime(exam.end_time)}
               </p>
             </div>
+            <Link href={`/admin/exams/${id}/stats`} className="btn-secondary">
+              ดูสถิติ
+            </Link>
             <button
               type="button"
               className="btn-secondary"
@@ -256,6 +276,34 @@ export default function AdminExamDetailPage() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                 />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">วิชา</label>
+                  <select
+                    className="input mt-1"
+                    value={subjectId}
+                    onChange={(e) => setSubjectId(e.target.value)}
+                  >
+                    <option value="">ไม่ระบุวิชา</option>
+                    {subjects.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.code ? `${s.code} — ${s.name}` : s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">เกณฑ์ผ่าน (%)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    className="input mt-1"
+                    value={passingPercentage}
+                    onChange={(e) => setPassingPercentage(Number(e.target.value))}
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium">ระยะเวลา (นาที)</label>

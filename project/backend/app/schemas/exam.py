@@ -65,6 +65,8 @@ class ExamCreate(BaseModel):
     duration: int = Field(gt=0, description="Duration in minutes")
     start_time: datetime
     end_time: datetime
+    subject_id: uuid.UUID | None = None
+    passing_percentage: float = Field(default=50.0, ge=0, le=100)
 
 
 class ExamUpdate(BaseModel):
@@ -73,6 +75,8 @@ class ExamUpdate(BaseModel):
     duration: int | None = None
     start_time: datetime | None = None
     end_time: datetime | None = None
+    subject_id: uuid.UUID | None = None
+    passing_percentage: float | None = Field(default=None, ge=0, le=100)
 
 
 class ExamListResponse(BaseModel):
@@ -83,6 +87,9 @@ class ExamListResponse(BaseModel):
     start_time: datetime
     end_time: datetime
     status: str  # upcoming | open | closed
+    subject_id: uuid.UUID | None = None
+    subject_name: str | None = None
+    passing_percentage: float = 50.0
 
     class Config:
         from_attributes = True
