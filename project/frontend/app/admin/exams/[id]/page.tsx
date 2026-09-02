@@ -5,7 +5,11 @@ import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { api, ApiError } from "@/lib/api";
 import { ExamDetail, Question } from "@/types";
-import { formatDateTime } from "@/lib/datetime";
+import {
+  formatDateTime,
+  localInputToUtcIso,
+  utcIsoToLocalInput,
+} from "@/lib/datetime";
 
 interface ChoiceForm {
   choice_text: string;
@@ -25,6 +29,16 @@ export default function AdminExamDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Exam settings form, seeded from the loaded exam.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [duration, setDuration] = useState(30);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+
   const [questionText, setQuestionText] = useState("");
   const [score, setScore] = useState(10);
   const [choices, setChoices] = useState<ChoiceForm[]>(emptyChoices());
@@ -35,8 +49,16 @@ export default function AdminExamDetailPage() {
     try {
       const data = await api.get<ExamDetail>(`/api/exams/${id}/admin`);
       setExam(data);
-    } catch {
-      setError("ไม่พบข้อสอบนี้");
+      setTitle(data.title);
+      setDescription(data.description ?? "");
+      setDuration(data.duration);
+      setStartTime(utcIsoToLocalInput(data.start_time));
+      setEndTime(utcIsoToLocalInput(data.end_time));
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "ไม่สามารถโหลดข้อมูลข้อสอบได้"
+      );
     } finally {
       setLoading(false);
     }
@@ -46,6 +68,62 @@ export default function AdminExamDetailPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  async function patchExam(body: Record<string, unknown>, message: string) {
+    setSavingSettings(true);
+    setSettingsMessage(null);
+    setError(null);
+    try {
+      await api.put(`/api/exams/${id}`, body);
+      await load();
+      setSettingsMessage(message);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  async function handleSaveSettings(e: React.FormEvent) {
+    e.preventDefault();
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    if (!(start < end)) {
+      setError("เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม");
+      return;
+    }
+    await patchExam(
+      {
+        title,
+        description,
+        duration,
+        start_time: localInputToUtcIso(startTime),
+        end_time: localInputToUtcIso(endTime),
+      },
+      "บันทึกการตั้งค่าแล้ว"
+    );
+  }
+
+  /**
+   * Open / close are expressed as changes to the exam window rather than a
+   * separate flag, so there is only ever one source of truth for whether an
+   * exam is running. Opening also pushes the end time out by the full duration
+   * so nobody is cut short the moment they start.
+   */
+  async function handleOpenNow() {
+    const now = new Date();
+    const newEnd = new Date(now.getTime() + Number(duration) * 60_000);
+    await patchExam(
+      { start_time: now.toISOString(), end_time: newEnd.toISOString() },
+      `เปิดสอบแล้ว ปิดอัตโนมัติในอีก ${duration} นาที`
+    );
+  }
+
+  async function handleCloseNow() {
+    if (!confirm("ปิดข้อสอบตอนนี้? ผู้ที่กำลังสอบอยู่จะถูกตัดเวลาทันที")) return;
+    const now = new Date().toISOString();
+    await patchExam({ end_time: now }, "ปิดข้อสอบแล้ว");
+  }
 
   function updateChoiceText(index: number, text: string) {
     setChoices((prev) => prev.map((c, i) => (i === index ? { ...c, choice_text: text } : c)));
@@ -96,13 +174,128 @@ export default function AdminExamDetailPage() {
     <>
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold">{exam.title}</h1>
-          <p className="text-sm text-slate-500">
-            {exam.duration} นาที · {formatDateTime(exam.start_time)} —{" "}
-            {formatDateTime(exam.end_time)}
-          </p>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold">{exam.title}</h1>
+                <span
+                  className={`badge ${
+                    exam.status === "open"
+                      ? "bg-green-100 text-green-700"
+                      : exam.status === "upcoming"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {exam.status === "open"
+                    ? "กำลังเปิดสอบ"
+                    : exam.status === "upcoming"
+                    ? "ยังไม่ถึงเวลา"
+                    : "ปิดแล้ว"}
+                </span>
+              </div>
+              {exam.description && (
+                <p className="mt-1 text-sm text-slate-600">{exam.description}</p>
+              )}
+              <p className="mt-1 text-sm text-slate-500">
+                {exam.duration} นาที · {formatDateTime(exam.start_time)} —{" "}
+                {formatDateTime(exam.end_time)}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setSettingsOpen((v) => !v)}
+            >
+              {settingsOpen ? "ซ่อนการตั้งค่า" : "แก้ไขข้อสอบ"}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleOpenNow}
+              disabled={savingSettings}
+            >
+              เปิดสอบตอนนี้
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+              onClick={handleCloseNow}
+              disabled={savingSettings || exam.status === "closed"}
+            >
+              ปิดข้อสอบตอนนี้
+            </button>
+          </div>
+
+          {settingsMessage && (
+            <p className="text-sm text-green-700">{settingsMessage}</p>
+          )}
         </div>
+
+        {settingsOpen && (
+          <section className="card space-y-4">
+            <h2 className="text-lg font-semibold">ตั้งค่าข้อสอบ</h2>
+            <form onSubmit={handleSaveSettings} className="space-y-3">
+              <div>
+                <label className="text-sm font-medium">หัวข้อข้อสอบ</label>
+                <input
+                  required
+                  className="input mt-1"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">คำอธิบาย</label>
+                <textarea
+                  className="input mt-1"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">ระยะเวลา (นาที)</label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  className="input mt-1 w-32"
+                  value={duration}
+                  onChange={(e) => setDuration(Number(e.target.value))}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">เวลาเริ่ม</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    className="input mt-1"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">เวลาสิ้นสุด</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    className="input mt-1"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                  />
+                </div>
+              </div>
+              <button type="submit" className="btn-primary" disabled={savingSettings}>
+                {savingSettings ? "กำลังบันทึก..." : "บันทึกการตั้งค่า"}
+              </button>
+            </form>
+          </section>
+        )}
 
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">คำถามทั้งหมด ({exam.questions.length})</h2>

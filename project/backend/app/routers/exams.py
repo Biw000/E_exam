@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.deps import get_current_user, require_admin
 from app.models.user import User
-from app.models.exam import Exam
+from app.models.exam import Exam, Question
 from app.schemas.exam import (
     ExamCreate,
     ExamUpdate,
@@ -41,7 +41,7 @@ def list_exams(db: Session = Depends(get_db), current_user: User = Depends(get_c
 def get_exam(exam_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     exam = (
         db.query(Exam)
-        .options(joinedload(Exam.questions).joinedload("choices"))
+        .options(joinedload(Exam.questions).joinedload(Question.choices))
         .filter(Exam.id == exam_id)
         .first()
     )
@@ -66,7 +66,7 @@ def create_exam(payload: ExamCreate, db: Session = Depends(get_db), admin: User 
 @router.put("/{exam_id}", response_model=ExamAdminDetailResponse)
 def update_exam(exam_id: uuid.UUID, payload: ExamUpdate, db: Session = Depends(get_db),
                  admin: User = Depends(require_admin)):
-    exam = db.query(Exam).options(joinedload(Exam.questions).joinedload("choices")).filter(Exam.id == exam_id).first()
+    exam = db.query(Exam).options(joinedload(Exam.questions).joinedload(Question.choices)).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
@@ -91,7 +91,7 @@ def delete_exam(exam_id: uuid.UUID, db: Session = Depends(get_db), admin: User =
 def get_exam_admin(exam_id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     exam = (
         db.query(Exam)
-        .options(joinedload(Exam.questions).joinedload("choices"))
+        .options(joinedload(Exam.questions).joinedload(Question.choices))
         .filter(Exam.id == exam_id)
         .first()
     )

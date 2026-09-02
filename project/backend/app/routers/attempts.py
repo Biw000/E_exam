@@ -40,7 +40,7 @@ def _get_owned_attempt(db: Session, attempt_id: uuid.UUID, user: User) -> ExamAt
 
 
 def _to_attempt_response(db: Session, attempt: ExamAttempt) -> AttemptResponse:
-    exam = db.query(Exam).options(joinedload(Exam.questions).joinedload("choices")).filter(Exam.id == attempt.exam_id).first()
+    exam = db.query(Exam).options(joinedload(Exam.questions).joinedload(Question.choices)).filter(Exam.id == attempt.exam_id).first()
     saved_answers = (
         db.query(Answer).filter(Answer.attempt_id == attempt.id).all()
     )
@@ -60,7 +60,7 @@ def _to_attempt_response(db: Session, attempt: ExamAttempt) -> AttemptResponse:
 @router.post("/api/exams/{exam_id}/start", response_model=AttemptResponse, status_code=status.HTTP_201_CREATED)
 def start_attempt(exam_id: uuid.UUID, payload: StartAttemptRequest, db: Session = Depends(get_db),
                    student: User = Depends(require_student)):
-    exam = db.query(Exam).options(joinedload(Exam.questions).joinedload("choices")).filter(Exam.id == exam_id).first()
+    exam = db.query(Exam).options(joinedload(Exam.questions).joinedload(Question.choices)).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
     if not is_exam_open(exam):
