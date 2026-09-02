@@ -16,10 +16,38 @@ export type FaceState =
   | "MULTIPLE_FACES"
   | "UNAVAILABLE";
 
+/** Normalized face bounds, 0-1 relative to the video frame. */
+export interface FaceBox {
+  centerX: number;
+  centerY: number;
+  /** Largest of width/height, used as a proxy for how close the face is. */
+  span: number;
+}
+
 export interface TrackerFrame {
   state: FaceState;
   faceCount: number;
   pose: HeadPose | null;
+  box: FaceBox | null;
+}
+
+function boxFromLandmarks(landmarks: Array<{ x: number; y: number }>): FaceBox | null {
+  if (!landmarks.length) return null;
+  let minX = 1;
+  let maxX = 0;
+  let minY = 1;
+  let maxY = 0;
+  for (const point of landmarks) {
+    if (point.x < minX) minX = point.x;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.y > maxY) maxY = point.y;
+  }
+  return {
+    centerX: (minX + maxX) / 2,
+    centerY: (minY + maxY) / 2,
+    span: Math.max(maxX - minX, maxY - minY),
+  };
 }
 
 interface Options {
@@ -50,6 +78,7 @@ export function useFaceTracker({
 }: Options) {
   const [state, setState] = useState<FaceState>("LOADING");
   const [pose, setPose] = useState<HeadPose | null>(null);
+  const [box, setBox] = useState<FaceBox | null>(null);
   const [faceCount, setFaceCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -115,6 +144,7 @@ export function useFaceTracker({
         const count = result.faceLandmarks?.length ?? 0;
         let nextState: FaceState;
         let nextPose: HeadPose | null = null;
+        let nextBox: FaceBox | null = null;
 
         if (count === 0) {
           nextState = "NO_FACE";
@@ -126,12 +156,19 @@ export function useFaceTracker({
           if (matrix) {
             nextPose = poseFromMatrix(Array.from(matrix), configRef.current);
           }
+          nextBox = boxFromLandmarks(result.faceLandmarks[0]);
         }
 
         setState(nextState);
         setFaceCount(count);
         setPose(nextPose);
-        onFrameRef.current?.({ state: nextState, faceCount: count, pose: nextPose });
+        setBox(nextBox);
+        onFrameRef.current?.({
+          state: nextState,
+          faceCount: count,
+          pose: nextPose,
+          box: nextBox,
+        });
       };
 
       rafRef.current = requestAnimationFrame(tick);
@@ -150,8 +187,9 @@ export function useFaceTracker({
   const reset = useCallback(() => {
     setState("LOADING");
     setPose(null);
+    setBox(null);
     setFaceCount(0);
   }, []);
 
-  return { state, pose, faceCount, loadError, reset };
+  return { state, pose, box, faceCount, loadError, reset };
 }

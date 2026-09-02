@@ -52,7 +52,7 @@ const MonitorPanel = forwardRef<CameraHandle, Props>(
     return (
       <div className="fixed bottom-4 right-4 z-40 w-40 sm:w-48">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-          <Camera ref={ref} onError={onError} className="w-full" />
+          <Camera ref={ref} onError={onError} className="w-full" aspectClassName="aspect-[4/3]" />
           <div className={`flex items-center gap-2 border-t px-2 py-1.5 text-[11px] ${TONE_STYLES[status.tone]}`}>
             <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${DOT_STYLES[status.tone]}`} />
             <span className="truncate" aria-live="polite">

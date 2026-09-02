@@ -77,6 +77,11 @@ export function poseFromMatrix(matrix: number[], config: HeadPoseConfig): HeadPo
   if (pitch > 90) pitch -= 180;
   else if (pitch < -90) pitch += 180;
 
+  // The matrix axis points the opposite way to the convention used across the
+  // app (positive = chin up). Without this flip, "เงยหน้า" only passed when
+  // the user looked down.
+  pitch = -pitch;
+
   return {
     yaw,
     pitch,
@@ -188,3 +193,55 @@ export function enrollHint(
       return "";
   }
 }
+
+
+/**
+ * Framing checks, kept next to the pose maths so the numbers live in one file.
+ *
+ * A face that is too small, off to one side, or half out of frame produces a
+ * weak embedding that then fails verification on exam day. Catching it during
+ * enrollment is much kinder than catching it when the exam is about to start.
+ */
+export interface FaceFraming {
+  centerX: number;
+  centerY: number;
+  span: number;
+}
+
+export const FRAMING = {
+  minSpan: 0.32,
+  maxSpan: 0.85,
+  centerXRange: [0.34, 0.66] as const,
+  centerYRange: [0.3, 0.72] as const,
+};
+
+export type FramingIssue =
+  | "TOO_FAR"
+  | "TOO_CLOSE"
+  | "OFF_LEFT"
+  | "OFF_RIGHT"
+  | "OFF_TOP"
+  | "OFF_BOTTOM"
+  | null;
+
+export function checkFraming(box: FaceFraming | null): FramingIssue {
+  if (!box) return null;
+  if (box.span < FRAMING.minSpan) return "TOO_FAR";
+  if (box.span > FRAMING.maxSpan) return "TOO_CLOSE";
+  // The preview is mirrored, so a face sitting at a low x appears on the
+  // viewer's right. The hints below are written from the user's point of view.
+  if (box.centerX < FRAMING.centerXRange[0]) return "OFF_RIGHT";
+  if (box.centerX > FRAMING.centerXRange[1]) return "OFF_LEFT";
+  if (box.centerY < FRAMING.centerYRange[0]) return "OFF_TOP";
+  if (box.centerY > FRAMING.centerYRange[1]) return "OFF_BOTTOM";
+  return null;
+}
+
+export const FRAMING_HINTS: Record<NonNullable<FramingIssue>, string> = {
+  TOO_FAR: "ขยับเข้าใกล้กล้องอีกนิด",
+  TOO_CLOSE: "ถอยห่างจากกล้องเล็กน้อย",
+  OFF_LEFT: "ขยับไปทางขวาให้อยู่กลางกรอบ",
+  OFF_RIGHT: "ขยับไปทางซ้ายให้อยู่กลางกรอบ",
+  OFF_TOP: "ขยับลงให้ใบหน้าอยู่กลางกรอบ",
+  OFF_BOTTOM: "ขยับขึ้นให้ใบหน้าอยู่กลางกรอบ",
+};

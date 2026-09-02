@@ -21,6 +21,12 @@ interface CameraProps {
   className?: string;
   /** Mirror the preview so moving right on screen matches moving right in real life. */
   mirrored?: boolean;
+  /**
+   * Tailwind aspect classes for the video box. The default is portrait on
+   * phones and landscape from `sm` up: a 16:9 box on a narrow screen crops the
+   * forehead and chin, which is exactly what enrollment needs to see.
+   */
+  aspectClassName?: string;
 }
 
 const ERROR_MESSAGES: Record<CameraErrorKind, string> = {
@@ -52,7 +58,16 @@ function classifyError(err: unknown): CameraErrorKind {
  * watching them.
  */
 const Camera = forwardRef<CameraHandle, CameraProps>(
-  ({ onError, onReady, className, mirrored = true }, ref) => {
+  (
+    {
+      onError,
+      onReady,
+      className,
+      mirrored = true,
+      aspectClassName = "aspect-[3/4] sm:aspect-[4/3]",
+    },
+    ref
+  ) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -135,7 +150,7 @@ const Camera = forwardRef<CameraHandle, CameraProps>(
           ref={videoRef}
           muted
           playsInline
-          className="w-full rounded-lg bg-slate-900 aspect-video object-cover"
+          className={`w-full rounded-lg bg-slate-900 object-cover ${aspectClassName}`}
           style={mirrored ? { transform: "scaleX(-1)" } : undefined}
         />
         <canvas ref={canvasRef} className="hidden" />

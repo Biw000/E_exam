@@ -8,7 +8,10 @@ import {
   ENROLL_INSTRUCTIONS,
   ENROLL_SEQUENCE,
   EnrollPose,
+  FRAMING_HINTS,
+  FramingIssue,
   HeadPoseConfig,
+  checkFraming,
   enrollHint,
   matchesEnrollPose,
 } from "@/lib/headPose";
@@ -35,6 +38,7 @@ export default function FaceEnrollment({ onComplete, submitting, errorMessage }:
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraKind, setCameraKind] = useState<CameraErrorKind | null>(null);
   const [justCaptured, setJustCaptured] = useState<EnrollPose | null>(null);
+  const [framing, setFraming] = useState<FramingIssue>(null);
 
   const holdStart = useRef<number | null>(null);
   const capturingRef = useRef(false);
@@ -79,15 +83,26 @@ export default function FaceEnrollment({ onComplete, submitting, errorMessage }:
     getVideo,
     config,
     fps: 8,
-    onFrame: ({ state: faceState, pose: headPose }) => {
+    onFrame: ({ state: faceState, pose: headPose, box }) => {
       if (capturingRef.current || finishedRef.current) return;
       const current = ENROLL_SEQUENCE[stepRef.current];
       if (!current) return;
 
       if (faceState !== "FACE_OK" || !headPose) {
         holdStart.current = null;
+        setFraming(null);
         return;
       }
+
+      // Framing is checked before the pose. Telling someone to turn left while
+      // their face is half out of frame produces a sample that will not verify.
+      const issue = checkFraming(box);
+      setFraming(issue);
+      if (issue) {
+        holdStart.current = null;
+        return;
+      }
+
       if (!matchesEnrollPose(headPose, current, config)) {
         holdStart.current = null;
         return;
@@ -116,6 +131,12 @@ export default function FaceEnrollment({ onComplete, submitting, errorMessage }:
     void onComplete(samples);
   }, [done, samples, onComplete]);
 
+  // If registration failed after the last pose, unlock the component so the
+  // user can retake instead of being stuck on a dead screen.
+  useEffect(() => {
+    if (errorMessage) finishedRef.current = false;
+  }, [errorMessage]);
+
   function handleCameraError(message: string, kind: CameraErrorKind) {
     setCameraError(message);
     setCameraKind(kind);
@@ -125,6 +146,7 @@ export default function FaceEnrollment({ onComplete, submitting, errorMessage }:
     finishedRef.current = false;
     setStepIndex(0);
     setSamples({});
+    setFraming(null);
     holdStart.current = null;
   }
 
@@ -174,6 +196,33 @@ export default function FaceEnrollment({ onComplete, submitting, errorMessage }:
 
       <div className="relative">
         <Camera ref={cameraRef} onError={handleCameraError} className="w-full" />
+
+        {/* Face placement guide. Turns green once the framing checks pass, so
+            the target is visible before the user is asked to hold a pose. */}
+        {!done && !cameraError && (
+          <svg
+            className="pointer-events-none absolute inset-0 h-full w-full"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <ellipse
+              cx="50"
+              cy="48"
+              rx="27"
+              ry="35"
+              fill="none"
+              strokeWidth="0.8"
+              strokeDasharray={framing ? "3 2" : undefined}
+              className={
+                framing || state !== "FACE_OK"
+                  ? "stroke-white/70"
+                  : "stroke-green-400"
+              }
+            />
+          </svg>
+        )}
+
         {justCaptured && (
           <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/60">
             <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-900">
@@ -208,6 +257,8 @@ export default function FaceEnrollment({ onComplete, submitting, errorMessage }:
               ? "พบมากกว่า 1 ใบหน้า กรุณาให้มีเพียงคุณคนเดียวในเฟรม"
               : state === "UNAVAILABLE"
               ? "ไม่สามารถตรวจจับใบหน้าอัตโนมัติได้"
+              : framing
+              ? FRAMING_HINTS[framing]
               : target
               ? enrollHint(pose, target, config)
               : ""}
@@ -219,6 +270,13 @@ export default function FaceEnrollment({ onComplete, submitting, errorMessage }:
       {errorMessage && (
         <p className="text-sm text-red-600" role="alert">
           {errorMessage}
+        </p>
+      )}
+
+      {pose && !done && (
+        <p className="text-center text-[11px] tabular-nums text-slate-400">
+          yaw {pose.yaw.toFixed(0)}° ({pose.direction_x}) · pitch{" "}
+          {pose.pitch.toFixed(0)}° ({pose.direction_y})
         </p>
       )}
 
