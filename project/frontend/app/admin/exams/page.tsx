@@ -5,6 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import { api, ApiError } from "@/lib/api";
 import { ExamListItem } from "@/types";
+import { formatDateTime } from "@/lib/datetime";
 
 export default function AdminExamsPage() {
   const [exams, setExams] = useState<ExamListItem[]>([]);
@@ -57,8 +58,8 @@ export default function AdminExamsPage() {
               <div>
                 <h2 className="font-semibold">{exam.title}</h2>
                 <p className="text-sm text-slate-500">
-                  {exam.duration} นาที · {new Date(exam.start_time).toLocaleString("th-TH")} —{" "}
-                  {new Date(exam.end_time).toLocaleString("th-TH")}
+                  {exam.duration} นาที · {formatDateTime(exam.start_time)} —{" "}
+                  {formatDateTime(exam.end_time)}
                 </p>
               </div>
               <div className="flex gap-2">

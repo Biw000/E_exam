@@ -13,6 +13,7 @@ import { usePoseWatcher } from "@/hooks/usePoseWatcher";
 import { DEFAULT_HEAD_POSE_CONFIG, HeadPoseConfig, exceedsWarning } from "@/lib/headPose";
 import { api, ApiError } from "@/lib/api";
 import { Attempt, ExamDetail } from "@/types";
+import { parseServerDate } from "@/lib/datetime";
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
@@ -251,9 +252,9 @@ export default function ExamPage() {
 
   const deadline = useMemo(() => {
     if (!attempt) return null;
-    return new Date(
-      new Date(attempt.started_at).getTime() + attempt.duration * 60_000
-    ).toISOString();
+    const startedAt = parseServerDate(attempt.started_at);
+    if (!startedAt) return null;
+    return new Date(startedAt.getTime() + attempt.duration * 60_000).toISOString();
   }, [attempt]);
 
   const handleSubmit = useCallback(

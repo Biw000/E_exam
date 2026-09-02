@@ -102,3 +102,14 @@ export interface AdminResult {
   submitted_at: string | null;
   status: AttemptStatus;
 }
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  created_at: string;
+  attempt_count: number;
+  enrolled_poses: string[];
+  face_enrolled: boolean;
+}

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { api } from "@/lib/api";
 import { EventSeverity, SuspiciousEvent } from "@/types";
+import { formatDateTime } from "@/lib/datetime";
 
 const SEVERITY_STYLES: Record<EventSeverity, string> = {
   INFO: "bg-slate-100 text-slate-600",
@@ -145,7 +146,7 @@ export default function AdminAttemptEventsPage() {
                   )}
                 </div>
                 <span className="whitespace-nowrap text-xs text-slate-400">
-                  {new Date(ev.created_at).toLocaleString("th-TH")}
+                  {formatDateTime(ev.created_at)}
                 </span>
               </div>
             );

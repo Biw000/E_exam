@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { api, ApiError } from "@/lib/api";
+import { localInputToUtcIso } from "@/lib/datetime";
 
 interface ExamAdminDetail {
   id: string;
@@ -22,14 +23,33 @@ export default function CreateExamPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // The attempt deadline is the earlier of (start + duration) and end_time,
+    // so a window shorter than the duration silently cuts every attempt short.
+    // Catch that here rather than letting an exam go out misconfigured.
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    if (!(start < end)) {
+      setError("เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม");
+      return;
+    }
+    const windowMinutes = (end.getTime() - start.getTime()) / 60000;
+    if (windowMinutes < Number(duration)) {
+      setError(
+        `ช่วงเวลาเปิดสอบยาว ${Math.round(windowMinutes)} นาที แต่ตั้งระยะเวลาทำข้อสอบไว้ ${duration} นาที ` +
+          "ผู้สอบจะถูกตัดเวลาเมื่อถึงเวลาสิ้นสุด กรุณาขยายเวลาสิ้นสุดหรือลดระยะเวลาทำข้อสอบ"
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       const created = await api.post<ExamAdminDetail>("/api/exams", {
         title,
         description,
         duration,
-        start_time: new Date(startTime).toISOString(),
-        end_time: new Date(endTime).toISOString(),
+        start_time: localInputToUtcIso(startTime),
+        end_time: localInputToUtcIso(endTime),
       });
       router.push(`/admin/exams/${created.id}`);
     } catch (err) {

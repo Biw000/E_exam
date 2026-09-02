@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import { api, ApiError } from "@/lib/api";
 import { ExamDetail, Question } from "@/types";
+import { formatDateTime } from "@/lib/datetime";
 
 interface ChoiceForm {
   choice_text: string;
@@ -98,8 +99,8 @@ export default function AdminExamDetailPage() {
         <div>
           <h1 className="text-2xl font-bold">{exam.title}</h1>
           <p className="text-sm text-slate-500">
-            {exam.duration} นาที · {new Date(exam.start_time).toLocaleString("th-TH")} —{" "}
-            {new Date(exam.end_time).toLocaleString("th-TH")}
+            {exam.duration} นาที · {formatDateTime(exam.start_time)} —{" "}
+            {formatDateTime(exam.end_time)}
           </p>
         </div>
 

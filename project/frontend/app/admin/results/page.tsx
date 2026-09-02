@@ -5,6 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import { api } from "@/lib/api";
 import { AdminResult } from "@/types";
+import { formatDateTime } from "@/lib/datetime";
 
 const statusLabel: Record<string, string> = {
   in_progress: "กำลังทำข้อสอบ",
@@ -56,9 +57,9 @@ export default function AdminResultsPage() {
                     {r.score ?? "-"}/{r.total_score}
                   </td>
                   <td className="py-2 pr-4">{statusLabel[r.status]}</td>
-                  <td className="py-2 pr-4">{new Date(r.started_at).toLocaleString("th-TH")}</td>
+                  <td className="py-2 pr-4">{formatDateTime(r.started_at)}</td>
                   <td className="py-2 pr-4">
-                    {r.submitted_at ? new Date(r.submitted_at).toLocaleString("th-TH") : "-"}
+                    {formatDateTime(r.submitted_at)}
                   </td>
                   <td className="py-2">
                     <Link href={`/admin/attempts/${r.attempt_id}`} className="text-brand-600 font-medium">

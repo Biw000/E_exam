@@ -45,6 +45,9 @@ export default function AdminDashboard() {
           <Link href="/admin/exams" className="btn-primary">
             จัดการข้อสอบ
           </Link>
+          <Link href="/admin/users" className="btn-secondary">
+            จัดการบัญชี
+          </Link>
           <Link href="/admin/results" className="btn-secondary">
             ดูผลสอบ
           </Link>
