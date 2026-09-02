@@ -200,27 +200,18 @@ export default function FaceEnrollment({ onComplete, submitting, errorMessage }:
         {/* Face placement guide. Turns green once the framing checks pass, so
             the target is visible before the user is asked to hold a pose. */}
         {!done && !cameraError && (
-          <svg
-            className="pointer-events-none absolute inset-0 h-full w-full"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
+          <div
             aria-hidden="true"
-          >
-            <ellipse
-              cx="50"
-              cy="48"
-              rx="27"
-              ry="35"
-              fill="none"
-              strokeWidth="0.8"
-              strokeDasharray={framing ? "3 2" : undefined}
-              className={
-                framing || state !== "FACE_OK"
-                  ? "stroke-white/70"
-                  : "stroke-green-400"
-              }
-            />
-          </svg>
+            className={`pointer-events-none absolute left-1/2 top-1/2 h-[76%] w-auto -translate-x-1/2 -translate-y-1/2 rounded-[50%] border-2 transition-colors ${
+              framing || state !== "FACE_OK"
+                ? "border-dashed border-white/70"
+                : "border-solid border-green-400"
+            }`}
+            /* A fixed 5:7 box keeps the guide face-shaped. Sizing it in
+               percentages of the video instead would stretch it into a long
+               tube on a portrait phone frame. */
+            style={{ aspectRatio: "5 / 7" }}
+          />
         )}
 
         {justCaptured && (

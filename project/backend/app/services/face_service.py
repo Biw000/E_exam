@@ -178,9 +178,11 @@ def _head_pose_from_landmarks(landmarks, width: int, height: int) -> HeadPoseRes
     elif pitch < -90:
         pitch += 180
 
-    # Match the browser-side convention: positive pitch means chin up.
-    # Without this the server would report UP where the client reports DOWN.
+    # Match the browser-side convention: positive pitch means chin up and
+    # positive yaw means turned to the user's right. Without these the server
+    # would report UP/LEFT where the client reports DOWN/RIGHT.
     pitch = -pitch
+    yaw = -yaw
 
     return HeadPoseResult(yaw=yaw, pitch=pitch, roll=roll)
 

@@ -77,16 +77,18 @@ export function poseFromMatrix(matrix: number[], config: HeadPoseConfig): HeadPo
   if (pitch > 90) pitch -= 180;
   else if (pitch < -90) pitch += 180;
 
-  // The matrix axis points the opposite way to the convention used across the
-  // app (positive = chin up). Without this flip, "เงยหน้า" only passed when
-  // the user looked down.
+  // Both axes come out of the matrix reversed from the convention used across
+  // the app (positive yaw = turned to the user's right, positive pitch = chin
+  // up). Without these flips, "หันซ้าย" only passed when turning right and
+  // "เงยหน้า" only passed when looking down.
   pitch = -pitch;
+  const signedYaw = -yaw;
 
   return {
-    yaw,
+    yaw: signedYaw,
     pitch,
     roll,
-    direction_x: classifyX(yaw, config),
+    direction_x: classifyX(signedYaw, config),
     direction_y: classifyY(pitch, config),
   };
 }
