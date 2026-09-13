@@ -332,7 +332,7 @@ def migrate() -> None:
 
 
 if __name__ == "__main__":
-    print("Running E-Exam schema migration...", flush=True)
+    print("Running SightExam schema migration...", flush=True)
     try:
         migrate()
     except Exception as exc:  # noqa: BLE001 - top-level script, show the error

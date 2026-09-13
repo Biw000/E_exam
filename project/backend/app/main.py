@@ -21,7 +21,7 @@ from app.routers import (
 # requirements.txt if you want to add migrations later.
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="E-Exam API", version="1.0.0")
+app = FastAPI(title="SightExam API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,

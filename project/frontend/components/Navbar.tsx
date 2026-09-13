@@ -16,7 +16,7 @@ export default function Navbar() {
   return (
     <nav className="w-full bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
       <Link href={role === "admin" ? "/admin" : "/student"} className="font-bold text-brand-700">
-        E-Exam
+        SightExam
       </Link>
       <div className="flex items-center gap-4 text-sm">
         {role === "admin" && (
