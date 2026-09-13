@@ -71,6 +71,17 @@ export default function StudentDashboard() {
     return sorted;
   }, [exams]);
 
+  /**
+   * A finished attempt is not the end of the road when the exam allows
+   * retakes. Previously the button locked to "ส่งข้อสอบแล้ว" as soon as any
+   * attempt was submitted, which made the retake limit unusable.
+   */
+  function canRetake(exam: ExamListItem): boolean {
+    if (exam.status !== "open") return false;
+    if (exam.max_attempts === 0) return true;
+    return exam.attempts_used < exam.max_attempts;
+  }
+
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
     if (!joinCode.trim()) return;
@@ -141,6 +152,11 @@ export default function StudentDashboard() {
                     {exam.requires_code && (
                       <span className="badge bg-indigo-100 text-indigo-700">ต้องใช้รหัส</span>
                     )}
+                    {exam.max_attempts > 0 && exam.attempts_used > 0 && (
+                      <span className="badge bg-slate-100 text-slate-600">
+                        ใช้สิทธิ์ {exam.attempts_used}/{exam.max_attempts}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-slate-500">{exam.description}</p>
                   <p className="text-sm text-slate-500 mt-1">ระยะเวลา: {exam.duration} นาที</p>
@@ -151,11 +167,15 @@ export default function StudentDashboard() {
                   )}
                 </div>
 
-                {myResult?.status === "submitted" ? (
+                {myResult?.status === "submitted" && !canRetake(exam) ? (
                   <span className="btn-secondary opacity-70 cursor-default">ส่งข้อสอบแล้ว</span>
                 ) : exam.status === "open" ? (
                   <Link href={`/exam/${exam.id}`} className="btn-primary whitespace-nowrap">
-                    {exam.requires_code ? "เข้าห้องสอบ" : "เริ่มสอบ"}
+                    {myResult?.status === "submitted" || myResult?.status === "terminated"
+                      ? "สอบใหม่"
+                      : exam.requires_code
+                      ? "เข้าห้องสอบ"
+                      : "เริ่มสอบ"}
                   </Link>
                 ) : (
                   <span className="btn-secondary opacity-50 cursor-not-allowed">

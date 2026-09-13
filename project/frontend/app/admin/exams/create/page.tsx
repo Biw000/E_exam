@@ -26,6 +26,7 @@ export default function CreateExamPage() {
   const [maxAttempts, setMaxAttempts] = useState(1);
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [strictMode, setStrictMode] = useState(false);
+  const [violationLimit, setViolationLimit] = useState(3);
 
   useEffect(() => {
     api
@@ -110,6 +111,7 @@ export default function CreateExamPage() {
         max_attempts: maxAttempts,
         shuffle_questions: shuffleQuestions,
         strict_mode: strictMode,
+        violation_limit: violationLimit,
       });
       router.push(`/admin/exams/${created.id}`);
     } catch (err) {
@@ -222,6 +224,66 @@ export default function CreateExamPage() {
                   ` — สั้นกว่าระยะเวลาทำข้อสอบ ${duration} นาที ผู้สอบจะถูกตัดเวลา`}
               </p>
             )}
+          </div>
+          <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+            <p className="text-sm font-medium">กฎการคุมสอบ</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium">จำนวนครั้งที่ทำได้</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  className="input mt-1"
+                  value={maxAttempts}
+                  onChange={(e) => setMaxAttempts(Number(e.target.value))}
+                />
+                <p className="mt-1 text-xs text-slate-500">ใส่ 0 = ไม่จำกัดจำนวนครั้ง</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">จำนวนครั้งที่ผิดกฎได้</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  className="input mt-1"
+                  value={violationLimit}
+                  onChange={(e) => setViolationLimit(Number(e.target.value))}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  ใช้เมื่อเปิดโหมดเข้มงวด ครบจำนวนนี้แล้วยกเลิกการสอบ
+                </p>
+              </div>
+            </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={shuffleQuestions}
+                onChange={(e) => setShuffleQuestions(e.target.checked)}
+              />
+              <span>
+                สุ่มลำดับข้อสอบใหม่ทุกครั้งที่เริ่มสอบ
+                <span className="block text-xs text-slate-500">
+                  ลำดับถูกบันทึกไว้ต่อการสอบหนึ่งครั้ง รีเฟรชหน้าแล้วลำดับไม่เปลี่ยน
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={strictMode}
+                onChange={(e) => setStrictMode(e.target.checked)}
+              />
+              <span>
+                โหมดเข้มงวด: สลับหน้าจอ คัดลอก วาง หรือออกจากเต็มหน้าจอ ยกเลิกการสอบ
+                <span className="block text-xs text-amber-700">
+                  กฎนี้เข้มมาก การแจ้งเตือนจากระบบปฏิบัติการหรือการกด Esc โดยไม่ตั้งใจ
+                  ก็ทำให้ถูกยกเลิกได้ ควรเปิดเฉพาะการสอบที่มีผู้คุมสอบอยู่ด้วย
+                </span>
+              </span>
+            </label>
           </div>
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <button type="submit" className="btn-primary w-full" disabled={loading}>

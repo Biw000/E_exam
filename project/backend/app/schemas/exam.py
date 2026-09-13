@@ -83,6 +83,13 @@ class ExamUpdate(BaseModel):
     subject_id: uuid.UUID | None = None
     passing_percentage: float | None = Field(default=None, ge=0, le=100)
     join_code: str | None = Field(default=None, max_length=12)
+    # These were missing here while present on ExamCreate, so edits to the
+    # proctoring settings were accepted by the API and silently dropped by
+    # Pydantic before they ever reached the model.
+    max_attempts: int | None = Field(default=None, ge=0, le=50)
+    shuffle_questions: bool | None = None
+    strict_mode: bool | None = None
+    violation_limit: int | None = Field(default=None, ge=1, le=20)
 
 
 class ExamListResponse(BaseModel):

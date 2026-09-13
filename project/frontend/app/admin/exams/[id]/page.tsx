@@ -44,6 +44,7 @@ export default function AdminExamDetailPage() {
   const [maxAttempts, setMaxAttempts] = useState(1);
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [strictMode, setStrictMode] = useState(false);
+  const [violationLimit, setViolationLimit] = useState(1);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
 
@@ -68,6 +69,7 @@ export default function AdminExamDetailPage() {
       setMaxAttempts(data.max_attempts ?? 1);
       setShuffleQuestions(data.shuffle_questions ?? true);
       setStrictMode(data.strict_mode ?? false);
+      setViolationLimit(data.violation_limit ?? 1);
       setError(null);
     } catch (err) {
       setError(
@@ -128,6 +130,7 @@ export default function AdminExamDetailPage() {
         max_attempts: maxAttempts,
         shuffle_questions: shuffleQuestions,
         strict_mode: strictMode,
+        violation_limit: violationLimit,
       },
       "บันทึกการตั้งค่าแล้ว"
     );
@@ -403,6 +406,20 @@ export default function AdminExamDetailPage() {
                       onChange={(e) => setMaxAttempts(Number(e.target.value))}
                     />
                     <p className="mt-1 text-xs text-slate-500">ใส่ 0 = ไม่จำกัดจำนวนครั้ง</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">จำนวนครั้งที่ผิดกฎได้</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      className="input mt-1"
+                      value={violationLimit}
+                      onChange={(e) => setViolationLimit(Number(e.target.value))}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      ใช้เมื่อเปิดโหมดเข้มงวด ครบจำนวนนี้แล้วยกเลิกการสอบ
+                    </p>
                   </div>
                 </div>
                 <label className="flex items-start gap-2 text-sm">

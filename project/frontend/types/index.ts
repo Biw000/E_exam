@@ -40,6 +40,7 @@ export interface ExamListItem {
   max_attempts: number;
   shuffle_questions: boolean;
   strict_mode: boolean;
+  violation_limit: number;
   attempts_used: number;
 }
 
