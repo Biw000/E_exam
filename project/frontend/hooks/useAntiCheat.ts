@@ -15,7 +15,29 @@ interface Options {
   cooldownMs?: number;
   /** Block the right-click menu during the exam. */
   blockContextMenu?: boolean;
+  /**
+   * Strict proctoring. When on, the events listed in STRICT_VIOLATIONS end the
+   * attempt on the first occurrence instead of only being logged.
+   */
+  strict?: boolean;
+  onViolation?: (eventType: string, description: string) => void;
 }
+
+/**
+ * The events that end an attempt in strict mode.
+ *
+ * WINDOW_BLUR is deliberately NOT in this list even though it looks similar to
+ * TAB_SWITCH: focus is lost by system notifications, IME switches and password
+ * managers, none of which the student controls. visibilitychange is a much
+ * better signal that someone actually left the page.
+ */
+const STRICT_VIOLATIONS: Record<string, string> = {
+  TAB_SWITCH: "ออกจากหน้าต่างสอบ",
+  COPY_ATTEMPT: "คัดลอกข้อความ",
+  CUT_ATTEMPT: "ตัดข้อความ",
+  PASTE_ATTEMPT: "วางข้อความ",
+  FULLSCREEN_EXIT: "ออกจากโหมดเต็มหน้าจอ",
+};
 
 /**
  * Watches the browser activity a web page is actually allowed to observe.
@@ -34,14 +56,30 @@ export function useAntiCheat({
   log,
   cooldownMs = 15000,
   blockContextMenu = true,
+  strict = false,
+  onViolation,
 }: Options) {
   const lastFired = useRef<Record<string, number>>({});
   const suppressed = useRef<Record<string, number>>({});
   const logRef = useRef(log);
+  const violationRef = useRef(onViolation);
+  const strictRef = useRef(strict);
+  const firedViolation = useRef(false);
+
+  // Counters for ordinary input activity. Reported as a periodic summary
+  // rather than one event per click, which would be unusable noise.
+  const clicks = useRef(0);
+  const keystrokes = useRef(0);
 
   useEffect(() => {
     logRef.current = log;
   }, [log]);
+  useEffect(() => {
+    violationRef.current = onViolation;
+  }, [onViolation]);
+  useEffect(() => {
+    strictRef.current = strict;
+  }, [strict]);
 
   /**
    * Rate-limits repeats. Fifty NO_FACE ticks in a row should be one row in the
@@ -69,40 +107,64 @@ export function useAntiCheat({
     [cooldownMs]
   );
 
+  /**
+   * Strict-mode events bypass the cooldown entirely: the rule is "first
+   * occurrence ends the attempt", so swallowing one as a duplicate would make
+   * the rule behave differently depending on timing.
+   */
+  const check = useCallback(
+    (eventType: string, description?: string, metadata?: Record<string, unknown>) => {
+      const label = STRICT_VIOLATIONS[eventType];
+      if (strictRef.current && label && !firedViolation.current) {
+        firedViolation.current = true;
+        logRef.current(eventType, description, { ...metadata, strict_violation: true });
+        violationRef.current?.(eventType, label);
+        return;
+      }
+      fire(eventType, description, metadata);
+    },
+    [fire]
+  );
+
   useEffect(() => {
     if (!enabled || typeof document === "undefined") return;
 
     const onVisibility = () => {
       if (document.visibilityState === "hidden") {
-        fire("TAB_SWITCH", "สลับแท็บหรือย่อหน้าต่างระหว่างสอบ");
+        check("TAB_SWITCH", "สลับแท็บหรือย่อหน้าต่างระหว่างสอบ");
       }
     };
 
-    const onBlur = () => fire("WINDOW_BLUR", "หน้าต่างสอบสูญเสียโฟกัส");
-    const onFocus = () => fire("WINDOW_FOCUS", "กลับมาที่หน้าต่างสอบ");
+    const onBlur = () => check("WINDOW_BLUR", "หน้าต่างสอบสูญเสียโฟกัส");
+    const onFocus = () => check("WINDOW_FOCUS", "กลับมาที่หน้าต่างสอบ");
 
     const onFullscreenChange = () => {
       if (!document.fullscreenElement) {
-        fire("FULLSCREEN_EXIT", "ออกจากโหมดเต็มหน้าจอ");
+        check("FULLSCREEN_EXIT", "ออกจากโหมดเต็มหน้าจอ");
       }
     };
 
-    const onCopy = () => fire("COPY_ATTEMPT", "พยายามคัดลอกข้อความ");
-    const onCut = () => fire("CUT_ATTEMPT", "พยายามตัดข้อความ");
-    const onPaste = () => fire("PASTE_ATTEMPT", "พยายามวางข้อความ");
+    const onCopy = () => check("COPY_ATTEMPT", "พยายามคัดลอกข้อความ");
+    const onCut = () => check("CUT_ATTEMPT", "พยายามตัดข้อความ");
+    const onPaste = () => check("PASTE_ATTEMPT", "พยายามวางข้อความ");
 
     const onContextMenu = (e: MouseEvent) => {
       if (blockContextMenu) e.preventDefault();
-      fire("CONTEXT_MENU", "เปิดเมนูคลิกขวา");
+      check("CONTEXT_MENU", "เปิดเมนูคลิกขวา");
+    };
+
+    const onClick = () => {
+      clicks.current += 1;
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      keystrokes.current += 1;
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       const key = e.key.toLowerCase();
-      if (key === "c") fire("COPY_ATTEMPT", "กด Ctrl+C");
-      else if (key === "x") fire("CUT_ATTEMPT", "กด Ctrl+X");
-      else if (key === "v") fire("PASTE_ATTEMPT", "กด Ctrl+V");
+      if (key === "c") check("COPY_ATTEMPT", "กด Ctrl+C");
+      else if (key === "x") check("CUT_ATTEMPT", "กด Ctrl+X");
+      else if (key === "v") check("PASTE_ATTEMPT", "กด Ctrl+V");
       // Ctrl+Tab, Alt+Tab and Win/Cmd are handled by the OS and never reach
       // the page, so there is nothing to record for them.
     };
@@ -116,8 +178,23 @@ export function useAntiCheat({
     document.addEventListener("paste", onPaste);
     document.addEventListener("contextmenu", onContextMenu);
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onClick);
+
+    // One summary per minute keeps a record of how active the session was
+    // without writing a database row for every single click.
+    const activityTimer = window.setInterval(() => {
+      if (clicks.current === 0 && keystrokes.current === 0) return;
+      logRef.current("INPUT_ACTIVITY", "สรุปการใช้เมาส์และคีย์บอร์ด", {
+        clicks: clicks.current,
+        keystrokes: keystrokes.current,
+        window_seconds: 60,
+      });
+      clicks.current = 0;
+      keystrokes.current = 0;
+    }, 60_000);
 
     return () => {
+      window.clearInterval(activityTimer);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
@@ -127,8 +204,9 @@ export function useAntiCheat({
       document.removeEventListener("paste", onPaste);
       document.removeEventListener("contextmenu", onContextMenu);
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onClick);
     };
-  }, [enabled, fire, blockContextMenu]);
+  }, [enabled, check, blockContextMenu]);
 
   return { fire };
 }

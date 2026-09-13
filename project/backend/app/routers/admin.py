@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
@@ -7,10 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import require_admin
-from app.models.attempt import ExamAttempt
+from app.models.attempt import AttemptStatus, ExamAttempt
 from app.models.exam import Exam
 from app.models.face_embedding import FaceEmbedding
-from app.models.suspicious_event import SuspiciousEvent
+from app.models.suspicious_event import EventSeverity, SuspiciousEvent
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -114,3 +115,68 @@ def delete_user(
 
     db.delete(user)
     db.commit()
+
+
+class AlertResponse(BaseModel):
+    event_id: uuid.UUID
+    attempt_id: uuid.UUID
+    student_name: str
+    student_email: EmailStr
+    exam_title: str
+    event_type: str
+    severity: str
+    description: str | None
+    attempt_status: str
+    created_at: str
+
+
+@router.get("/alerts", response_model=list[AlertResponse])
+def alerts(
+    minutes: int = 180,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Recent high-priority activity, newest first, for the proctor dashboard.
+
+    Polled rather than pushed: a websocket would be the "real" answer, but it
+    needs a connection that survives Render's free tier spinning the service
+    down, and a 20-second poll is indistinguishable to a human watching a room.
+
+    Only SUSPICIOUS events and terminated attempts appear here. Putting every
+    warning in the feed would make it scroll too fast to be read, which is the
+    same as having no alerts at all.
+    """
+    since = datetime.utcnow() - timedelta(minutes=max(1, minutes))
+
+    rows = (
+        db.query(SuspiciousEvent, ExamAttempt, User, Exam)
+        .join(ExamAttempt, SuspiciousEvent.attempt_id == ExamAttempt.id)
+        .join(User, ExamAttempt.user_id == User.id)
+        .join(Exam, ExamAttempt.exam_id == Exam.id)
+        .filter(SuspiciousEvent.created_at >= since)
+        .filter(
+            (SuspiciousEvent.severity == EventSeverity.SUSPICIOUS.value)
+            | (SuspiciousEvent.event_type == "ATTEMPT_TERMINATED")
+        )
+        .order_by(SuspiciousEvent.created_at.desc())
+        .limit(max(1, min(limit, 200)))
+        .all()
+    )
+
+    return [
+        AlertResponse(
+            event_id=event.id,
+            attempt_id=attempt.id,
+            student_name=user.name,
+            student_email=user.email,
+            exam_title=exam.title,
+            event_type=event.event_type,
+            severity=event.severity,
+            description=event.description,
+            attempt_status=attempt.status,
+            created_at=event.created_at.isoformat(),
+        )
+        for event, attempt, user, exam in rows
+    ]

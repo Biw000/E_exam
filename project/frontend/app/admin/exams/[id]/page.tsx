@@ -40,6 +40,10 @@ export default function AdminExamDetailPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectId, setSubjectId] = useState("");
   const [passingPercentage, setPassingPercentage] = useState(50);
+  const [joinCodeValue, setJoinCodeValue] = useState("");
+  const [maxAttempts, setMaxAttempts] = useState(1);
+  const [shuffleQuestions, setShuffleQuestions] = useState(true);
+  const [strictMode, setStrictMode] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
 
@@ -60,6 +64,10 @@ export default function AdminExamDetailPage() {
       setEndTime(utcIsoToLocalInput(data.end_time));
       setSubjectId(data.subject_id ?? "");
       setPassingPercentage(data.passing_percentage ?? 50);
+      setJoinCodeValue(data.join_code ?? "");
+      setMaxAttempts(data.max_attempts ?? 1);
+      setShuffleQuestions(data.shuffle_questions ?? true);
+      setStrictMode(data.strict_mode ?? false);
       setError(null);
     } catch (err) {
       setError(
@@ -116,6 +124,10 @@ export default function AdminExamDetailPage() {
         end_time: localInputToUtcIso(endTime),
         subject_id: subjectId || null,
         passing_percentage: passingPercentage,
+        join_code: joinCodeValue.trim() || null,
+        max_attempts: maxAttempts,
+        shuffle_questions: shuffleQuestions,
+        strict_mode: strictMode,
       },
       "บันทึกการตั้งค่าแล้ว"
     );
@@ -216,7 +228,15 @@ export default function AdminExamDetailPage() {
                 <p className="mt-1 text-sm text-slate-600">{exam.description}</p>
               )}
               <p className="mt-1 text-sm text-slate-500">
-                {exam.subject_name ?? "ไม่ระบุวิชา"} · {exam.duration} นาที · {formatDateTime(exam.start_time)} —{" "}
+                {exam.subject_name ?? "ไม่ระบุวิชา"} · {exam.duration} นาที
+                {exam.join_code && (
+                  <>
+                    {" · รหัสเข้าห้อง "}
+                    <span className="font-mono font-medium text-slate-700">
+                      {exam.join_code}
+                    </span>
+                  </>
+                )} · {formatDateTime(exam.start_time)} —{" "}
                 {formatDateTime(exam.end_time)}
               </p>
             </div>
@@ -316,6 +336,37 @@ export default function AdminExamDetailPage() {
                   onChange={(e) => setDuration(Number(e.target.value))}
                 />
               </div>
+              <div>
+                <label className="text-sm font-medium">รหัสเข้าห้องสอบ</label>
+                <div className="mt-1 flex gap-2">
+                  <input
+                    className="input font-mono uppercase tracking-widest"
+                    placeholder="เว้นว่างถ้าไม่ต้องใช้รหัส"
+                    maxLength={12}
+                    value={joinCodeValue}
+                    onChange={(e) => setJoinCodeValue(e.target.value.toUpperCase())}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary whitespace-nowrap"
+                    onClick={() =>
+                      setJoinCodeValue(
+                        Array.from({ length: 6 }, () =>
+                          "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".charAt(
+                            Math.floor(Math.random() * 32)
+                          )
+                        ).join("")
+                      )
+                    }
+                  >
+                    สุ่มรหัส
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  ถ้าตั้งรหัสไว้ ผู้สอบต้องกรอกรหัสนี้ก่อนจึงจะเริ่มสอบได้
+                  ตัวอักษรที่สับสนง่าย (I, O, 0, 1) ถูกตัดออกจากการสุ่มแล้ว
+                </p>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium">เวลาเริ่ม</label>
@@ -337,6 +388,53 @@ export default function AdminExamDetailPage() {
                     onChange={(e) => setEndTime(e.target.value)}
                   />
                 </div>
+              </div>
+              <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+                <p className="text-sm font-medium">กฎการคุมสอบ</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium">จำนวนครั้งที่ทำได้</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={50}
+                      className="input mt-1"
+                      value={maxAttempts}
+                      onChange={(e) => setMaxAttempts(Number(e.target.value))}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">ใส่ 0 = ไม่จำกัดจำนวนครั้ง</p>
+                  </div>
+                </div>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={shuffleQuestions}
+                    onChange={(e) => setShuffleQuestions(e.target.checked)}
+                  />
+                  <span>
+                    สุ่มลำดับข้อสอบใหม่ทุกครั้งที่เริ่มสอบ
+                    <span className="block text-xs text-slate-500">
+                      ลำดับจะถูกบันทึกไว้ต่อการสอบหนึ่งครั้ง รีเฟรชหน้าแล้วลำดับไม่เปลี่ยน
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={strictMode}
+                    onChange={(e) => setStrictMode(e.target.checked)}
+                  />
+                  <span>
+                    โหมดเข้มงวด: สลับหน้าจอ คัดลอก วาง หรือออกจากเต็มหน้าจอ 1 ครั้ง
+                    ยกเลิกการสอบทันที
+                    <span className="block text-xs text-amber-700">
+                      กฎนี้เข้มมาก การแจ้งเตือนจากระบบปฏิบัติการหรือการกด Esc
+                      โดยไม่ตั้งใจก็ทำให้ถูกยกเลิกได้ ควรเปิดเฉพาะการสอบที่มีผู้คุมสอบอยู่ด้วย
+                    </span>
+                  </span>
+                </label>
               </div>
               <button type="submit" className="btn-primary" disabled={savingSettings}>
                 {savingSettings ? "กำลังบันทึก..." : "บันทึกการตั้งค่า"}

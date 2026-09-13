@@ -7,8 +7,15 @@ from app.models.attempt import AttemptStatus
 from app.schemas.exam import QuestionResponse
 
 
+class TerminateAttemptRequest(BaseModel):
+    reason: str
+    detail: str | None = None
+
+
 class StartAttemptRequest(BaseModel):
     face_image_base64: str
+    # Required only when the exam has a room code configured.
+    join_code: str | None = None
 
 
 class SavedAnswer(BaseModel):
@@ -66,7 +73,10 @@ class AdminResultResponse(BaseModel):
     attempt_id: uuid.UUID
     student_name: str
     student_email: str
+    exam_id: uuid.UUID
     exam_title: str
+    subject_name: str | None = None
+    passing_percentage: float = 50.0
     score: int | None
     total_score: int
     started_at: datetime

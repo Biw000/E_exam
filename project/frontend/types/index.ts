@@ -36,6 +36,11 @@ export interface ExamListItem {
   subject_id: string | null;
   subject_name: string | null;
   passing_percentage: number;
+  requires_code: boolean;
+  max_attempts: number;
+  shuffle_questions: boolean;
+  strict_mode: boolean;
+  attempts_used: number;
 }
 
 export interface Subject {
@@ -73,9 +78,11 @@ export interface ExamStats {
 
 export interface ExamDetail extends ExamListItem {
   questions: Question[];
+  /** Present only in admin responses. */
+  join_code?: string | null;
 }
 
-export type AttemptStatus = "in_progress" | "submitted" | "expired";
+export type AttemptStatus = "in_progress" | "submitted" | "expired" | "terminated";
 
 export interface SavedAnswer {
   question_id: string;
@@ -131,7 +138,10 @@ export interface AdminResult {
   attempt_id: string;
   student_name: string;
   student_email: string;
+  exam_id: string;
   exam_title: string;
+  subject_name: string | null;
+  passing_percentage: number;
   score: number | null;
   total_score: number;
   started_at: string;
@@ -148,4 +158,17 @@ export interface AdminUser {
   attempt_count: number;
   enrolled_poses: string[];
   face_enrolled: boolean;
+}
+
+export interface ProctorAlert {
+  event_id: string;
+  attempt_id: string;
+  student_name: string;
+  student_email: string;
+  exam_title: string;
+  event_type: string;
+  severity: EventSeverity;
+  description: string | null;
+  attempt_status: AttemptStatus;
+  created_at: string;
 }

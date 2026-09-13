@@ -23,6 +23,9 @@ export default function CreateExamPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectId, setSubjectId] = useState("");
   const [passingPercentage, setPassingPercentage] = useState(50);
+  const [maxAttempts, setMaxAttempts] = useState(1);
+  const [shuffleQuestions, setShuffleQuestions] = useState(true);
+  const [strictMode, setStrictMode] = useState(false);
 
   useEffect(() => {
     api
@@ -104,6 +107,9 @@ export default function CreateExamPage() {
         end_time: localInputToUtcIso(endTime),
         subject_id: subjectId || null,
         passing_percentage: passingPercentage,
+        max_attempts: maxAttempts,
+        shuffle_questions: shuffleQuestions,
+        strict_mode: strictMode,
       });
       router.push(`/admin/exams/${created.id}`);
     } catch (err) {

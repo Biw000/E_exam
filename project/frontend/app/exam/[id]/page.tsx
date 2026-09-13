@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { CameraErrorKind, CameraHandle } from "@/components/Camera";
 import MonitorPanel from "@/components/MonitorPanel";
 import FaceVerification from "@/components/FaceVerification";
@@ -17,11 +17,33 @@ import { parseServerDate } from "@/lib/datetime";
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 
-type Phase = "loading" | "closed" | "verify" | "exam" | "submitted" | "error";
+/**
+ * Serious proctoring events allowed before the attempt is ended.
+ *
+ * Three rather than one: a single NO_FACE can come from the student reaching
+ * for a dropped pen or a laptop lid shifting, and ending an exam over that
+ * would be unjust. Three separate occurrences is a pattern.
+ */
+const STRIKE_LIMIT = 3;
+
+/** How long the student sees the explanation before the retake begins. */
+const AUTO_RESTART_DELAY_MS = 6000;
+
+type Phase =
+  | "loading"
+  | "closed"
+  | "verify"
+  | "exam"
+  | "submitted"
+  | "terminated"
+  | "error";
 
 export default function ExamPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Pre-filled when the student arrived from the "join by code" box.
+  const [joinCode, setJoinCode] = useState(searchParams.get("code") ?? "");
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [exam, setExam] = useState<ExamDetail | null>(null);
@@ -37,16 +59,25 @@ export default function ExamPage() {
   const [submitting, setSubmitting] = useState(false);
   const [autoSubmitted, setAutoSubmitted] = useState(false);
   const [poseWarning, setPoseWarning] = useState(false);
+  const [terminationReason, setTerminationReason] = useState<string | null>(null);
+  const [strikes, setStrikes] = useState(0);
+  const [autoRestart, setAutoRestart] = useState(false);
+  const strikesRef = useRef(0);
 
   const monitorCameraRef = useRef<CameraHandle>(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pendingSync = useRef<Set<string>>(new Set());
   const attemptRef = useRef<Attempt | null>(null);
+  const phaseRef = useRef<Phase>("loading");
   const localStorageKey = attempt ? `eexam_answers_${attempt.id}` : null;
 
   useEffect(() => {
     attemptRef.current = attempt;
   }, [attempt]);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   // ---- Load exam metadata + tracking thresholds ----
   useEffect(() => {
@@ -87,17 +118,83 @@ export default function ExamPage() {
     []
   );
 
+  /**
+   * Ends the attempt when a strict-mode rule is broken. Whatever was answered
+   * is still graded on the server; the reason is recorded so a human can grant
+   * another attempt if the trigger was unfair.
+   */
+  const handleViolation = useCallback(
+    async (eventType: string, label: string) => {
+      const current = attemptRef.current;
+      if (!current) return;
+      setTerminationReason(label);
+      setPhase("terminated");
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      try {
+        await api.post(`/api/attempts/${current.id}/terminate`, {
+          reason: eventType,
+          detail: label,
+        });
+      } catch {
+        /* the attempt is over on screen either way; the event log has the record */
+      }
+    },
+    []
+  );
+
+  /**
+   * Strike rule: three serious proctoring events end the attempt.
+   *
+   * Counted here rather than on the server because the browser is where the
+   * events originate, and a student should see the count climbing instead of
+   * being cut off with no warning. The server still records every event, so
+   * the strike total can be verified from the log afterwards.
+   */
+  const addStrike = useCallback(
+    (label: string) => {
+      strikesRef.current += 1;
+      const count = strikesRef.current;
+      setStrikes(count);
+      if (count >= STRIKE_LIMIT) {
+        setAutoRestart(true);
+        void handleViolation("PROCTORING_STRIKES", `${label} (ครบ ${STRIKE_LIMIT} ครั้ง)`);
+      }
+    },
+    [handleViolation]
+  );
+
   const { fire } = useAntiCheat({
     enabled: phase === "exam",
     log: logEvent,
     cooldownMs: (config.face_check_interval_seconds || 7) * 2000,
+    strict: !!exam?.strict_mode,
+    onViolation: handleViolation,
   });
+
+  /**
+   * Fires an event and counts it as a strike. Face-related problems and
+   * sustained head movement come through here; ordinary browser noise does not.
+   */
+  const fireStrike = useCallback(
+    (eventType: string, label: string, metadata?: Record<string, unknown>) => {
+      if (phaseRef.current !== "exam" || strikesRef.current >= STRIKE_LIMIT) return;
+      fire(eventType, label, { ...metadata, strike: strikesRef.current + 1 });
+      addStrike(label);
+    },
+    [fire, addStrike]
+  );
 
   const raisePose = useCallback(
     (eventType: string, description: string, metadata: Record<string, unknown>) => {
-      fire(eventType, description, metadata);
+      // Only the sustained escalation counts as a strike; the first warning at
+      // 3 seconds is logged but does not punish a long glance at the clock.
+      if (metadata.level === "SUSTAINED") {
+        fireStrike(eventType, "หันหน้าออกจากหน้าจอเป็นเวลานาน", metadata);
+      } else {
+        fire(eventType, description, metadata);
+      }
     },
-    [fire]
+    [fire, fireStrike]
   );
 
   const { update: updatePose, reset: resetPose } = usePoseWatcher(config, raisePose);
@@ -109,19 +206,19 @@ export default function ExamPage() {
       if (state === "NO_FACE") {
         resetPose();
         setPoseWarning(false);
-        fire("NO_FACE", "ไม่พบใบหน้าในกล้อง");
+        fireStrike("NO_FACE", "ใบหน้าออกจากกล้อง");
         return;
       }
       if (state === "MULTIPLE_FACES") {
         resetPose();
         setPoseWarning(false);
-        fire("MULTIPLE_FACES", "พบมากกว่า 1 ใบหน้าในกล้อง");
+        fireStrike("MULTIPLE_FACES", "พบมากกว่า 1 ใบหน้าในกล้อง");
         return;
       }
       updatePose(pose ?? null);
       setPoseWarning(!!pose && exceedsWarning(pose, config));
     },
-    [fire, updatePose, resetPose, config]
+    [fireStrike, updatePose, resetPose, config]
   );
 
   const { state: faceState, pose } = useFaceTracker({
@@ -163,6 +260,7 @@ export default function ExamPage() {
     try {
       const started = await api.post<Attempt>(`/api/exams/${id}/start`, {
         face_image_base64: imageBase64,
+        join_code: joinCode || null,
       });
       setAttempt(started);
       attemptRef.current = started;
@@ -188,14 +286,15 @@ export default function ExamPage() {
     const el = document.documentElement;
     if (el.requestFullscreen) {
       el.requestFullscreen().catch(() => {
-        /* the browser may refuse; the exit listener still records state */
+        // Browsers only grant fullscreen from a user gesture. If it is refused
+        // the exam still runs; leaving it is recorded like any other event.
       });
     }
   }
 
   function handleCameraError(message: string, kind: CameraErrorKind) {
     setErrorMsg(message);
-    if (attemptRef.current) fire("CAMERA_DISABLED", message, { kind });
+    if (attemptRef.current) fireStrike("CAMERA_DISABLED", "กล้องถูกปิดระหว่างสอบ", { kind });
   }
 
   // ---- Answers: local state + localStorage + debounced autosave ----
@@ -249,6 +348,17 @@ export default function ExamPage() {
       Object.values(timers).forEach((t) => clearTimeout(t));
     };
   }, []);
+
+  // After the strike limit the student goes straight back into a fresh attempt
+  // (new shuffle, no saved answers) rather than being left on a dead end.
+  useEffect(() => {
+    if (phase !== "terminated" || !autoRestart) return;
+    const used = (exam?.attempts_used ?? 0) + 1;
+    const limit = exam?.max_attempts ?? 1;
+    if (limit !== 0 && used >= limit) return;
+    const timer = window.setTimeout(() => window.location.reload(), AUTO_RESTART_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [phase, autoRestart, exam]);
 
   const deadline = useMemo(() => {
     if (!attempt) return null;
@@ -305,6 +415,46 @@ export default function ExamPage() {
           <p className="text-center text-sm text-slate-500">
             แนะนำให้ทำข้อสอบบนคอมพิวเตอร์หรือโน้ตบุ๊ก เนื่องจากต้องใช้กล้องและโหมดเต็มหน้าจอ
           </p>
+          {exam.max_attempts > 0 && (
+            <p className="text-center text-sm text-slate-500">
+              สิทธิ์การสอบ: ใช้ไปแล้ว {exam.attempts_used} จาก {exam.max_attempts} ครั้ง
+            </p>
+          )}
+          {exam.strict_mode && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-medium">ข้อสอบนี้ใช้กฎการคุมสอบแบบเข้มงวด</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>ระบบจะเข้าสู่โหมดเต็มหน้าจอเมื่อเริ่มสอบ</li>
+                <li>สลับแท็บหรือย่อหน้าต่าง 1 ครั้ง การสอบจะถูกยกเลิกทันที</li>
+                <li>คัดลอก ตัด หรือวางข้อความ 1 ครั้ง การสอบจะถูกยกเลิกทันที</li>
+                <li>ออกจากโหมดเต็มหน้าจอ การสอบจะถูกยกเลิกทันที</li>
+                <li>
+                  ลำดับข้อสอบถูกสุ่มใหม่ทุกครั้ง หากเริ่มสอบใหม่จะต้องทำใหม่ทุกข้อ
+                </li>
+              </ul>
+              <p className="mt-2">
+                ปิดการแจ้งเตือนและโปรแกรมอื่นก่อนเริ่มสอบ เพื่อไม่ให้ถูกยกเลิกโดยไม่ตั้งใจ
+              </p>
+            </div>
+          )}
+          {exam.requires_code && (
+            <div className="card space-y-2">
+              <label className="text-sm font-medium" htmlFor="join-code">
+                รหัสเข้าห้องสอบ
+              </label>
+              <input
+                id="join-code"
+                className="input font-mono uppercase tracking-widest"
+                placeholder="กรอกรหัสที่ผู้คุมสอบให้"
+                value={joinCode}
+                maxLength={12}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+              />
+              <p className="text-xs text-slate-500">
+                ข้อสอบนี้ต้องใช้รหัสเข้าห้อง กรอกให้ถูกต้องก่อนยืนยันใบหน้า
+              </p>
+            </div>
+          )}
           <FaceVerification
             title="ยืนยันตัวตนก่อนเข้าสอบ"
             actionLabel="ยืนยันตัวตนและเริ่มสอบ"
@@ -313,6 +463,46 @@ export default function ExamPage() {
             resultMessage={verifyMessage}
             resultOk={false}
           />
+        </div>
+      </main>
+    );
+  }
+
+  if (phase === "terminated") {
+    const used = (exam?.attempts_used ?? 0) + 1;
+    const limit = exam?.max_attempts ?? 1;
+    const hasRetry = limit === 0 || used < limit;
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="card max-w-md space-y-4 text-center">
+          <h1 className="text-xl font-bold text-red-700">การสอบถูกยกเลิก</h1>
+          <p className="text-sm text-slate-600">
+            ระบบตรวจพบ{terminationReason ?? "การกระทำที่ผิดกฎการสอบ"} ระหว่างทำข้อสอบ
+            การสอบครั้งนี้จึงถูกยุติ และคำตอบที่ทำไว้ถูกบันทึกไว้แล้ว
+          </p>
+          <p className="text-sm text-slate-500">ผู้คุมสอบได้รับการแจ้งเตือนแล้ว</p>
+          {autoRestart && hasRetry && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              ระบบจะเริ่มการสอบครั้งใหม่ให้อัตโนมัติในอีกสักครู่
+            </p>
+          )}
+          <p className="text-sm text-slate-500">
+            {hasRetry
+              ? limit === 0
+                ? "คุณสามารถเริ่มสอบใหม่ได้ โดยข้อสอบจะถูกสุ่มลำดับใหม่และเริ่มจากข้อแรก"
+                : `ใช้สิทธิ์ไปแล้ว ${used} จาก ${limit} ครั้ง เริ่มสอบใหม่ได้อีก ${limit - used} ครั้ง โดยข้อสอบจะถูกสุ่มลำดับใหม่`
+              : "ใช้สิทธิ์การสอบครบตามที่กำหนดแล้ว หากเห็นว่าไม่เป็นธรรม กรุณาติดต่อผู้คุมสอบ"}
+          </p>
+          <div className="flex gap-2">
+            <button className="btn-secondary flex-1" onClick={() => router.push("/student")}>
+              กลับหน้ารายการสอบ
+            </button>
+            {hasRetry && (
+              <button className="btn-primary flex-1" onClick={() => window.location.reload()}>
+                เริ่มสอบใหม่
+              </button>
+            )}
+          </div>
         </div>
       </main>
     );
@@ -388,6 +578,8 @@ export default function ExamPage() {
           state={faceState}
           pose={pose}
           poseWarning={poseWarning}
+          strikes={strikes}
+          strikeLimit={STRIKE_LIMIT}
           onError={handleCameraError}
         />
       </main>

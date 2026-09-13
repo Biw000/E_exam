@@ -27,6 +27,19 @@ class Exam(Base):
     # anyone from taking or submitting the exam.
     passing_percentage = Column(Float, nullable=False, default=50.0)
 
+    # Optional room code. When set, a student must supply it before an attempt
+    # will start - useful for exams that should only be taken in a supervised
+    # session even though the exam itself is listed publicly.
+    join_code = Column(String(12), nullable=True)
+
+    # --- Proctoring / retake settings ---
+    # How many times one student may sit this exam. 0 means unlimited.
+    max_attempts = Column(Integer, nullable=False, default=1)
+    shuffle_questions = Column(Boolean, nullable=False, default=True)
+    # Strict mode ends the attempt as soon as violation_limit is reached.
+    strict_mode = Column(Boolean, nullable=False, default=False)
+    violation_limit = Column(Integer, nullable=False, default=1)
+
     subject = relationship("Subject", back_populates="exams")
     questions = relationship(
         "Question", back_populates="exam", cascade="all, delete-orphan", order_by="Question.order"

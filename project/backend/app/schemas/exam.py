@@ -67,6 +67,11 @@ class ExamCreate(BaseModel):
     end_time: datetime
     subject_id: uuid.UUID | None = None
     passing_percentage: float = Field(default=50.0, ge=0, le=100)
+    join_code: str | None = Field(default=None, max_length=12)
+    max_attempts: int = Field(default=1, ge=0, le=50)
+    shuffle_questions: bool = True
+    strict_mode: bool = False
+    violation_limit: int = Field(default=1, ge=1, le=20)
 
 
 class ExamUpdate(BaseModel):
@@ -77,6 +82,7 @@ class ExamUpdate(BaseModel):
     end_time: datetime | None = None
     subject_id: uuid.UUID | None = None
     passing_percentage: float | None = Field(default=None, ge=0, le=100)
+    join_code: str | None = Field(default=None, max_length=12)
 
 
 class ExamListResponse(BaseModel):
@@ -90,6 +96,14 @@ class ExamListResponse(BaseModel):
     subject_id: uuid.UUID | None = None
     subject_name: str | None = None
     passing_percentage: float = 50.0
+    # Students are told a code is needed, never what the code is.
+    requires_code: bool = False
+    max_attempts: int = 1
+    shuffle_questions: bool = True
+    strict_mode: bool = False
+    violation_limit: int = 1
+    # Filled in for students so the UI can say "ทำได้อีก 1 ครั้ง".
+    attempts_used: int = 0
 
     class Config:
         from_attributes = True
@@ -101,3 +115,14 @@ class ExamDetailResponse(ExamListResponse):
 
 class ExamAdminDetailResponse(ExamListResponse):
     questions: list[QuestionAdminResponse]
+    join_code: str | None = None
+
+
+class JoinByCodeRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=12)
+
+
+class JoinByCodeResponse(BaseModel):
+    id: uuid.UUID
+    title: str
+    status: str

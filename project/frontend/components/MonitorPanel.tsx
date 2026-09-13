@@ -9,6 +9,8 @@ interface Props {
   state: FaceState;
   pose: HeadPose | null;
   poseWarning: boolean;
+  strikes?: number;
+  strikeLimit?: number;
   onError: (message: string, kind: CameraErrorKind) => void;
 }
 
@@ -46,7 +48,7 @@ const DOT_STYLES: Record<StatusLine["tone"], string> = {
  * whole exam just raises the student's stress and stops meaning anything.
  */
 const MonitorPanel = forwardRef<CameraHandle, Props>(
-  ({ state, pose, poseWarning, onError }, ref) => {
+  ({ state, pose, poseWarning, strikes = 0, strikeLimit = 0, onError }, ref) => {
     const status = statusFor(state, poseWarning);
 
     return (
@@ -59,6 +61,15 @@ const MonitorPanel = forwardRef<CameraHandle, Props>(
               {status.label}
             </span>
           </div>
+          {strikeLimit > 0 && strikes > 0 && (
+            <div className="flex items-center gap-1.5 border-t border-slate-100 px-2 py-1.5 text-[11px] text-red-700">
+              <span>เตือนแล้ว</span>
+              <span className="font-semibold tabular-nums">
+                {strikes}/{strikeLimit}
+              </span>
+              <span className="text-slate-400">ครั้ง</span>
+            </div>
+          )}
         </div>
         {pose && process.env.NODE_ENV === "development" && (
           <p className="mt-1 text-right text-[10px] tabular-nums text-slate-400">

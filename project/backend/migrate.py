@@ -28,6 +28,13 @@ Changes applied:
   7. exams.subject_id               - link to a subject (nullable: existing
                                       exams stay valid and ungrouped)
   8. exams.passing_percentage       - pass mark used for the results summary
+  9. exams.join_code                - optional room code students must enter
+                                      before an exam will let them in
+ 10. exams proctoring settings     - max_attempts, shuffle_questions,
+                                      strict_mode, violation_limit
+ 11. exam_attempts.question_order  - the shuffled order for that one attempt
+ 12. exam_attempts.terminated_reason - why an attempt was cut short
+ 13. exam_attempts.status          - allow the new 'terminated' value
 """
 import sys
 
@@ -68,7 +75,7 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 1. face_embeddings.pose_type
         # ------------------------------------------------------------------
-        log("1/8  face_embeddings.pose_type")
+        log("1/13 face_embeddings.pose_type")
         conn.execute(
             text(
                 "ALTER TABLE face_embeddings "
@@ -80,7 +87,7 @@ def migrate() -> None:
         # 2. Drop UNIQUE(user_id), add UNIQUE(user_id, pose_type)
         #    The old constraint name is auto-generated, so look it up.
         # ------------------------------------------------------------------
-        log("2/8  face_embeddings unique constraint")
+        log("2/13 face_embeddings unique constraint")
         old_constraints = conn.execute(
             text(
                 """
@@ -127,7 +134,7 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 3. suspicious_events.event_type : ENUM -> VARCHAR(50)
         # ------------------------------------------------------------------
-        log("3/8  suspicious_events.event_type -> varchar")
+        log("3/13 suspicious_events.event_type -> varchar")
         current_type = conn.execute(
             text(
                 "SELECT data_type FROM information_schema.columns "
@@ -157,7 +164,7 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 4. suspicious_events.severity
         # ------------------------------------------------------------------
-        log("4/8  suspicious_events.severity")
+        log("4/13 suspicious_events.severity")
         conn.execute(
             text(
                 "ALTER TABLE suspicious_events "
@@ -188,7 +195,7 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 5. suspicious_events.event_metadata
         # ------------------------------------------------------------------
-        log("5/8  suspicious_events.event_metadata")
+        log("5/13 suspicious_events.event_metadata")
         conn.execute(
             text("ALTER TABLE suspicious_events ADD COLUMN IF NOT EXISTS event_metadata JSONB")
         )
@@ -203,7 +210,7 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 6. subjects table
         # ------------------------------------------------------------------
-        log("6/8  subjects table")
+        log("6/13 subjects table")
         conn.execute(
             text(
                 """
@@ -226,7 +233,7 @@ def migrate() -> None:
         #    Nullable on purpose: exams created before subjects existed stay
         #    usable and simply show up as "ไม่ระบุวิชา".
         # ------------------------------------------------------------------
-        log("7/8  exams.subject_id")
+        log("7/13 exams.subject_id")
         conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS subject_id UUID"))
         has_fk = conn.execute(
             text(
@@ -249,13 +256,78 @@ def migrate() -> None:
         # ------------------------------------------------------------------
         # 8. exams.passing_percentage
         # ------------------------------------------------------------------
-        log("8/8  exams.passing_percentage")
+        log("8/13 exams.passing_percentage")
         conn.execute(
             text(
                 "ALTER TABLE exams ADD COLUMN IF NOT EXISTS "
                 "passing_percentage DOUBLE PRECISION NOT NULL DEFAULT 50"
             )
         )
+
+        # ------------------------------------------------------------------
+        # 9. exams.join_code
+        #    Unique only among the exams that actually have one, so any number
+        #    of exams can stay open without a code.
+        # ------------------------------------------------------------------
+        log("9/13 exams.join_code")
+        conn.execute(text("ALTER TABLE exams ADD COLUMN IF NOT EXISTS join_code VARCHAR(12)"))
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_exams_join_code "
+                "ON exams (upper(join_code)) WHERE join_code IS NOT NULL"
+            )
+        )
+
+        # ------------------------------------------------------------------
+        # 10. Proctoring settings on the exam
+        # ------------------------------------------------------------------
+        log("10/13 exams proctoring settings")
+        for column, ddl in [
+            ("max_attempts", "INTEGER NOT NULL DEFAULT 1"),
+            ("shuffle_questions", "BOOLEAN NOT NULL DEFAULT TRUE"),
+            ("strict_mode", "BOOLEAN NOT NULL DEFAULT FALSE"),
+            ("violation_limit", "INTEGER NOT NULL DEFAULT 1"),
+        ]:
+            conn.execute(text(f"ALTER TABLE exams ADD COLUMN IF NOT EXISTS {column} {ddl}"))
+
+        # ------------------------------------------------------------------
+        # 11. Per-attempt question order
+        #     Stored so that a refresh mid-exam shows the same order, while a
+        #     new attempt gets a fresh shuffle.
+        # ------------------------------------------------------------------
+        log("11/13 exam_attempts.question_order")
+        conn.execute(
+            text("ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS question_order JSONB")
+        )
+
+        # ------------------------------------------------------------------
+        # 12. Why an attempt ended early
+        # ------------------------------------------------------------------
+        log("12/13 exam_attempts.terminated_reason")
+        conn.execute(
+            text("ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS terminated_reason VARCHAR(80)")
+        )
+
+        # ------------------------------------------------------------------
+        # 13. status enum needs a 'terminated' value
+        #     Converted to VARCHAR for the same reason event_type was: adding
+        #     enum values later is a migration each time.
+        # ------------------------------------------------------------------
+        log("13/13 exam_attempts.status -> varchar")
+        status_type = conn.execute(
+            text(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = 'exam_attempts' AND column_name = 'status'"
+            )
+        ).scalar()
+        if status_type != "character varying":
+            conn.execute(
+                text(
+                    "ALTER TABLE exam_attempts ALTER COLUMN status TYPE VARCHAR(20) "
+                    "USING status::text"
+                )
+            )
+            log("      converted from enum")
 
 
 

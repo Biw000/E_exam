@@ -54,7 +54,10 @@ def my_results(db: Session = Depends(get_db), student: User = Depends(require_st
 def admin_results(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     attempts = (
         db.query(ExamAttempt)
-        .options(joinedload(ExamAttempt.exam), joinedload(ExamAttempt.user))
+        .options(
+            joinedload(ExamAttempt.exam).joinedload(Exam.subject),
+            joinedload(ExamAttempt.user),
+        )
         .order_by(ExamAttempt.started_at.desc())
         .all()
     )
@@ -66,7 +69,10 @@ def admin_results(db: Session = Depends(get_db), admin: User = Depends(require_a
                 attempt_id=attempt.id,
                 student_name=attempt.user.name,
                 student_email=attempt.user.email,
+                exam_id=attempt.exam_id,
                 exam_title=attempt.exam.title,
+                subject_name=attempt.exam.subject.name if attempt.exam.subject else None,
+                passing_percentage=attempt.exam.passing_percentage or 50.0,
                 score=attempt.score,
                 total_score=total,
                 started_at=attempt.started_at,
