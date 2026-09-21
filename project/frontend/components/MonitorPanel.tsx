@@ -11,6 +11,9 @@ interface Props {
   poseWarning: boolean;
   strikes?: number;
   strikeLimit?: number;
+  blinks?: number;
+  strictViolations?: number;
+  strictLimit?: number;
   onError: (message: string, kind: CameraErrorKind) => void;
 }
 
@@ -48,7 +51,20 @@ const DOT_STYLES: Record<StatusLine["tone"], string> = {
  * whole exam just raises the student's stress and stops meaning anything.
  */
 const MonitorPanel = forwardRef<CameraHandle, Props>(
-  ({ state, pose, poseWarning, strikes = 0, strikeLimit = 0, onError }, ref) => {
+  (
+    {
+      state,
+      pose,
+      poseWarning,
+      strikes = 0,
+      strikeLimit = 0,
+      blinks = 0,
+      strictViolations = 0,
+      strictLimit = 0,
+      onError,
+    },
+    ref
+  ) => {
     const status = statusFor(state, poseWarning);
 
     return (
@@ -60,6 +76,18 @@ const MonitorPanel = forwardRef<CameraHandle, Props>(
             <span className="truncate" aria-live="polite">
               {status.label}
             </span>
+          </div>
+          {strictLimit > 0 && strictViolations > 0 && (
+            <div className="flex items-center gap-1.5 border-t border-slate-100 px-2 py-1.5 text-[11px] text-red-700">
+              <span>ผิดกฎหน้าจอ</span>
+              <span className="font-semibold tabular-nums">
+                {strictViolations}/{strictLimit}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center justify-between border-t border-slate-100 px-2 py-1 text-[10px] text-slate-400">
+            <span>กระพริบตา</span>
+            <span className="tabular-nums">{blinks}</span>
           </div>
           {strikeLimit > 0 && strikes > 0 && (
             <div className="flex items-center gap-1.5 border-t border-slate-100 px-2 py-1.5 text-[11px] text-red-700">

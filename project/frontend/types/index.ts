@@ -137,6 +137,7 @@ export interface MyResult {
 
 export interface AdminResult {
   attempt_id: string;
+  user_id: string;
   student_name: string;
   student_email: string;
   exam_id: string;
@@ -172,4 +173,36 @@ export interface ProctorAlert {
   description: string | null;
   attempt_status: AttemptStatus;
   created_at: string;
+}
+
+export interface StudentAttemptRow {
+  attempt_id: string;
+  exam_id: string;
+  exam_title: string;
+  subject_name: string | null;
+  status: AttemptStatus;
+  score: number | null;
+  total_score: number;
+  percentage: number | null;
+  passed: boolean | null;
+  passing_percentage: number;
+  started_at: string;
+  submitted_at: string | null;
+  terminated_reason: string | null;
+  warning_events: number;
+  suspicious_events: number;
+}
+
+export interface StudentReport {
+  user_id: string;
+  name: string;
+  email: string;
+  total_attempts: number;
+  graded_attempts: number;
+  terminated_attempts: number;
+  average_percentage: number | null;
+  best_percentage: number | null;
+  passed_count: number;
+  failed_count: number;
+  attempts: StudentAttemptRow[];
 }

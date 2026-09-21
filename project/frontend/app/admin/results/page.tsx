@@ -49,7 +49,12 @@ export default function AdminResultsPage() {
               {results.map((r) => (
                 <tr key={r.attempt_id} className="border-b last:border-0">
                   <td className="py-2 pr-4">
-                    {r.student_name}
+                    <Link
+                      href={`/admin/users/${r.user_id}`}
+                      className="text-indigo-700 hover:underline"
+                    >
+                      {r.student_name}
+                    </Link>
                     <div className="text-xs text-slate-400">{r.student_email}</div>
                   </td>
                   <td className="py-2 pr-4">{r.exam_title}</td>

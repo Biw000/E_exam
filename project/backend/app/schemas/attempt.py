@@ -71,6 +71,7 @@ class MyResultResponse(BaseModel):
 
 class AdminResultResponse(BaseModel):
     attempt_id: uuid.UUID
+    user_id: uuid.UUID
     student_name: str
     student_email: str
     exam_id: uuid.UUID

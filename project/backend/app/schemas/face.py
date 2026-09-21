@@ -79,3 +79,8 @@ class FaceConfigResponse(BaseModel):
     warning_duration: float
     suspicious_duration: float
     face_check_interval_seconds: float
+    absence_strike_seconds: float = 5.0
+    absence_restart_seconds: float = 10.0
+    blink_threshold: float = 0.5
+    gaze_away_threshold: float = 0.45
+    gaze_away_seconds: float = 6.0

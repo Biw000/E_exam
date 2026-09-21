@@ -35,7 +35,7 @@ export async function getFaceLandmarker(): Promise<FaceLandmarker> {
         baseOptions: { modelAssetPath: MODEL_PATH, delegate: "GPU" },
         runningMode: "VIDEO",
         numFaces: 2, // 2 so a second person in frame is detectable, not just ignored
-        outputFaceBlendshapes: false,
+        outputFaceBlendshapes: true, // eye blink + gaze scores
         outputFacialTransformationMatrixes: true,
       });
     } catch {
@@ -45,7 +45,7 @@ export async function getFaceLandmarker(): Promise<FaceLandmarker> {
         baseOptions: { modelAssetPath: MODEL_PATH, delegate: "CPU" },
         runningMode: "VIDEO",
         numFaces: 2,
-        outputFaceBlendshapes: false,
+        outputFaceBlendshapes: true, // eye blink + gaze scores
         outputFacialTransformationMatrixes: true,
       });
     }

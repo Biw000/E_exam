@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import { api, ApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
@@ -109,7 +110,12 @@ export default function AdminUsersPage() {
             <div key={user.id} className="card flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{user.name}</span>
+                  <Link
+                    href={`/admin/users/${user.id}`}
+                    className="font-medium text-indigo-700 hover:underline"
+                  >
+                    {user.name}
+                  </Link>
                   <span
                     className={`badge ${
                       user.role === "admin"
@@ -129,13 +135,18 @@ export default function AdminUsersPage() {
                     : "ยังไม่ได้ลงทะเบียนใบหน้า"}
                 </p>
               </div>
-              <button
-                type="button"
-                className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 transition hover:bg-red-50"
-                onClick={() => setPendingDelete(user)}
-              >
-                ลบบัญชี
-              </button>
+              <div className="flex gap-2">
+                <Link href={`/admin/users/${user.id}`} className="btn-secondary text-sm">
+                  ดูคะแนน
+                </Link>
+                <button
+                  type="button"
+                  className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 transition hover:bg-red-50"
+                  onClick={() => setPendingDelete(user)}
+                >
+                  ลบบัญชี
+                </button>
+              </div>
             </div>
           ))}
 

@@ -10,6 +10,8 @@ import QuestionCard from "@/components/QuestionCard";
 import { TrackerFrame, useFaceTracker } from "@/hooks/useFaceTracker";
 import { useAntiCheat } from "@/hooks/useAntiCheat";
 import { usePoseWatcher } from "@/hooks/usePoseWatcher";
+import { usePresenceWatcher } from "@/hooks/usePresenceWatcher";
+import { useEyeWatcher } from "@/hooks/useEyeWatcher";
 import { DEFAULT_HEAD_POSE_CONFIG, HeadPoseConfig, exceedsWarning } from "@/lib/headPose";
 import { api, ApiError } from "@/lib/api";
 import { Attempt, ExamDetail } from "@/types";
@@ -61,6 +63,8 @@ export default function ExamPage() {
   const [poseWarning, setPoseWarning] = useState(false);
   const [terminationReason, setTerminationReason] = useState<string | null>(null);
   const [strikes, setStrikes] = useState(0);
+  const [absentSeconds, setAbsentSeconds] = useState(0);
+  const [strictViolations, setStrictViolations] = useState(0);
   const [autoRestart, setAutoRestart] = useState(false);
   const strikesRef = useRef(0);
 
@@ -168,7 +172,9 @@ export default function ExamPage() {
     log: logEvent,
     cooldownMs: (config.face_check_interval_seconds || 7) * 2000,
     strict: !!exam?.strict_mode,
+    violationLimit: exam?.violation_limit ?? 1,
     onViolation: handleViolation,
+    onViolationCount: (count) => setStrictViolations(count),
   });
 
   /**
@@ -201,31 +207,76 @@ export default function ExamPage() {
 
   const getVideo = useCallback(() => monitorCameraRef.current?.getVideo() ?? null, []);
 
+  /**
+   * Face absence is judged per episode, not per frame. The tracker reports
+   * NO_FACE several times a second; the previous version turned every one of
+   * those into a strike, so half a second out of frame ended the exam.
+   */
+  const presence = usePresenceWatcher(
+    {
+      strikeSeconds: config.absence_strike_seconds,
+      restartSeconds: config.absence_restart_seconds,
+    },
+    {
+      onAbsenceStrike: (held) =>
+        fireStrike(
+          "FACE_ABSENT",
+          `ใบหน้าหายจากกล้อง ${held.toFixed(1)} วินาที`,
+          { held_seconds: Number(held.toFixed(1)) }
+        ),
+      onAbsenceRestart: (held) => {
+        if (phaseRef.current !== "exam") return;
+        fire("FACE_ABSENT", `ใบหน้าหายจากกล้องเกิน ${config.absence_restart_seconds} วินาที`, {
+          held_seconds: Number(held.toFixed(1)),
+          restart: true,
+        });
+        setAutoRestart(true);
+        void handleViolation(
+          "FACE_ABSENT_TOO_LONG",
+          `ใบหน้าหายจากกล้องต่อเนื่องเกิน ${config.absence_restart_seconds} วินาที`
+        );
+      },
+      onMultipleFacesStrike: (held) =>
+        fireStrike("MULTIPLE_FACES", "พบมากกว่า 1 ใบหน้าในกล้อง", {
+          held_seconds: Number(held.toFixed(1)),
+        }),
+    }
+  );
+
+  const eyeWatcher = useEyeWatcher({
+    enabled: phase === "exam",
+    blinkThreshold: config.blink_threshold,
+    gazeThreshold: config.gaze_away_threshold,
+    gazeAwaySeconds: config.gaze_away_seconds,
+    headCenterTolerance: config.center_tolerance,
+    log: (eventType, description, metadata) => fire(eventType, description, metadata),
+  });
+
   const handleFrame = useCallback(
-    ({ state, pose }: TrackerFrame) => {
-      if (state === "NO_FACE") {
+    ({ state, pose, eyes, at }: TrackerFrame) => {
+      presence.update(state, at);
+      setAbsentSeconds(state === "NO_FACE" ? presence.absentFor(at) : 0);
+
+      if (state === "NO_FACE" || state === "MULTIPLE_FACES") {
         resetPose();
         setPoseWarning(false);
-        fireStrike("NO_FACE", "ใบหน้าออกจากกล้อง");
-        return;
-      }
-      if (state === "MULTIPLE_FACES") {
-        resetPose();
-        setPoseWarning(false);
-        fireStrike("MULTIPLE_FACES", "พบมากกว่า 1 ใบหน้าในกล้อง");
+        eyeWatcher.update(null, null, at);
         return;
       }
       updatePose(pose ?? null);
       setPoseWarning(!!pose && exceedsWarning(pose, config));
+      eyeWatcher.update(eyes, pose ?? null, at);
     },
-    [fireStrike, updatePose, resetPose, config]
+    [presence, eyeWatcher, updatePose, resetPose, config]
   );
 
   const { state: faceState, pose } = useFaceTracker({
     enabled: phase === "exam",
     getVideo,
     config,
-    fps: 6,
+    // 12/s rather than 6/s: a blink lasts roughly 100-300 ms, and at 6/s most
+    // of them fell between two detections.
+    fps: 12,
     onFrame: handleFrame,
   });
 
@@ -420,14 +471,29 @@ export default function ExamPage() {
               สิทธิ์การสอบ: ใช้ไปแล้ว {exam.attempts_used} จาก {exam.max_attempts} ครั้ง
             </p>
           )}
+          <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">
+            <p className="font-medium">การตรวจสอบระหว่างสอบ</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>
+                ใบหน้าหายจากกล้องครบ {config.absence_strike_seconds} วินาที นับเป็นผิดกฎ 1 ครั้ง
+              </li>
+              <li>
+                ใบหน้าหายต่อเนื่องเกิน {config.absence_restart_seconds} วินาที
+                การสอบจะเริ่มใหม่ทันที
+              </li>
+              <li>ผิดกฎครบ {STRIKE_LIMIT} ครั้ง การสอบจะเริ่มใหม่ทันที</li>
+              <li>ระบบบันทึกการกระพริบตาและทิศทางการมองเพื่อให้ผู้คุมสอบตรวจสอบ</li>
+            </ul>
+          </div>
           {exam.strict_mode && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               <p className="font-medium">ข้อสอบนี้ใช้กฎการคุมสอบแบบเข้มงวด</p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 <li>ระบบจะเข้าสู่โหมดเต็มหน้าจอเมื่อเริ่มสอบ</li>
-                <li>สลับแท็บหรือย่อหน้าต่าง 1 ครั้ง การสอบจะถูกยกเลิกทันที</li>
-                <li>คัดลอก ตัด หรือวางข้อความ 1 ครั้ง การสอบจะถูกยกเลิกทันที</li>
-                <li>ออกจากโหมดเต็มหน้าจอ การสอบจะถูกยกเลิกทันที</li>
+                <li>
+                  สลับแท็บ คัดลอก ตัด วาง หรือออกจากโหมดเต็มหน้าจอ รวมครบ{" "}
+                  {exam.violation_limit} ครั้ง การสอบจะถูกยกเลิก
+                </li>
                 <li>
                   ลำดับข้อสอบถูกสุ่มใหม่ทุกครั้ง หากเริ่มสอบใหม่จะต้องทำใหม่ทุกข้อ
                 </li>
@@ -573,6 +639,21 @@ export default function ExamPage() {
           )}
         </div>
 
+        {absentSeconds >= 1 && (
+          <div
+            role="alert"
+            className="fixed inset-x-0 top-0 z-50 bg-red-600 px-4 py-3 text-center text-sm font-medium text-white shadow"
+          >
+            ไม่พบใบหน้าในกล้อง {Math.floor(absentSeconds)} วินาที —{" "}
+            {absentSeconds < config.absence_strike_seconds
+              ? `ครบ ${config.absence_strike_seconds} วินาทีจะนับเป็นการผิดกฎ 1 ครั้ง`
+              : `การสอบจะเริ่มใหม่ในอีก ${Math.max(
+                  0,
+                  Math.ceil(config.absence_restart_seconds - absentSeconds)
+                )} วินาที`}
+          </div>
+        )}
+
         <MonitorPanel
           ref={monitorCameraRef}
           state={faceState}
@@ -580,6 +661,9 @@ export default function ExamPage() {
           poseWarning={poseWarning}
           strikes={strikes}
           strikeLimit={STRIKE_LIMIT}
+          blinks={eyeWatcher.blinks}
+          strictViolations={exam?.strict_mode ? strictViolations : 0}
+          strictLimit={exam?.violation_limit ?? 1}
           onError={handleCameraError}
         />
       </main>

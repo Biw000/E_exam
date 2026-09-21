@@ -55,6 +55,22 @@ class SuspiciousEventType(str, enum.Enum):
     # --- hardware ---
     CAMERA_DISABLED = "CAMERA_DISABLED"
 
+    # --- presence ---
+    # A face that stayed out of frame long enough to count, as opposed to the
+    # per-frame NO_FACE signal.
+    FACE_ABSENT = "FACE_ABSENT"
+
+    # --- eyes ---
+    GAZE_AWAY = "GAZE_AWAY"
+    EYE_ACTIVITY = "EYE_ACTIVITY"
+
+    # --- input / lifecycle ---
+    # INPUT_ACTIVITY was sent by the client since the input tracker shipped,
+    # but was missing from this enum, so every one was rejected with a 422
+    # that the fire-and-forget logger then swallowed.
+    INPUT_ACTIVITY = "INPUT_ACTIVITY"
+    ATTEMPT_TERMINATED = "ATTEMPT_TERMINATED"
+
 
 # Default severity per event type. The frontend may not set severity itself;
 # the backend always resolves it from this map so the classification stays
@@ -78,6 +94,13 @@ DEFAULT_SEVERITY: dict[str, EventSeverity] = {
     SuspiciousEventType.CAMERA_DISABLED.value: EventSeverity.WARNING,
     SuspiciousEventType.MULTIPLE_FACES.value: EventSeverity.SUSPICIOUS,
     SuspiciousEventType.FACE_MISMATCH.value: EventSeverity.SUSPICIOUS,
+    SuspiciousEventType.FACE_ABSENT.value: EventSeverity.SUSPICIOUS,
+    # Eye signals are noisy from a webcam - reading the bottom of the screen
+    # looks like looking down - so they are review hints, never red.
+    SuspiciousEventType.GAZE_AWAY.value: EventSeverity.WARNING,
+    SuspiciousEventType.EYE_ACTIVITY.value: EventSeverity.INFO,
+    SuspiciousEventType.INPUT_ACTIVITY.value: EventSeverity.INFO,
+    SuspiciousEventType.ATTEMPT_TERMINATED.value: EventSeverity.SUSPICIOUS,
 }
 
 # Weight used to build a review-priority score for the admin log. Higher means

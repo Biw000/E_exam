@@ -36,6 +36,23 @@ class Settings(BaseSettings):
     POSE_WARNING_DURATION: float = 3.0
     POSE_SUSPICIOUS_DURATION: float = 8.0
 
+    # ------------------------------------------------------------------
+    # Face presence (seconds).
+    # Out of frame this long in one continuous stretch = one strike.
+    # Out of frame longer than the restart limit = the attempt restarts
+    # immediately, without waiting for more strikes.
+    # ------------------------------------------------------------------
+    FACE_ABSENCE_STRIKE_SECONDS: float = 5.0
+    FACE_ABSENCE_RESTART_SECONDS: float = 10.0
+
+    # ------------------------------------------------------------------
+    # Eyes. Values are MediaPipe blendshape scores in the range 0-1.
+    # ------------------------------------------------------------------
+    EYE_BLINK_THRESHOLD: float = 0.5
+    GAZE_AWAY_THRESHOLD: float = 0.45
+    # Eyes held away (with the head still facing the screen) this long.
+    GAZE_AWAY_SECONDS: float = 6.0
+
     # Identical repeated events inside this window are merged into one row
     # with a repeat_count instead of inserting duplicates. 0 disables merging.
     EVENT_COOLDOWN_SECONDS: int = 15
@@ -58,6 +75,11 @@ class Settings(BaseSettings):
             "warning_duration": self.POSE_WARNING_DURATION,
             "suspicious_duration": self.POSE_SUSPICIOUS_DURATION,
             "face_check_interval_seconds": self.FACE_CHECK_INTERVAL_SECONDS,
+            "absence_strike_seconds": self.FACE_ABSENCE_STRIKE_SECONDS,
+            "absence_restart_seconds": self.FACE_ABSENCE_RESTART_SECONDS,
+            "blink_threshold": self.EYE_BLINK_THRESHOLD,
+            "gaze_away_threshold": self.GAZE_AWAY_THRESHOLD,
+            "gaze_away_seconds": self.GAZE_AWAY_SECONDS,
         }
 
 

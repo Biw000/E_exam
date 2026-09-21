@@ -67,6 +67,7 @@ def admin_results(db: Session = Depends(get_db), admin: User = Depends(require_a
         results.append(
             AdminResultResponse(
                 attempt_id=attempt.id,
+                user_id=attempt.user_id,
                 student_name=attempt.user.name,
                 student_email=attempt.user.email,
                 exam_id=attempt.exam_id,
@@ -186,4 +187,140 @@ def exam_stats(exam_id: uuid.UUID, db: Session = Depends(get_db), admin: User = 
         failed=failed,
         pass_rate=round(passed / len(scores) * 100, 1) if scores else None,
         distribution=[ScoreBucket(label=label, count=counts[label]) for label, _ in buckets],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Per-student report
+# ---------------------------------------------------------------------------
+
+class StudentAttemptRow(BaseModel):
+    attempt_id: uuid.UUID
+    exam_id: uuid.UUID
+    exam_title: str
+    subject_name: str | None
+    status: str
+    score: int | None
+    total_score: int
+    percentage: float | None
+    passed: bool | None
+    passing_percentage: float
+    started_at: str
+    submitted_at: str | None
+    terminated_reason: str | None
+    warning_events: int
+    suspicious_events: int
+
+
+class StudentReportResponse(BaseModel):
+    user_id: uuid.UUID
+    name: str
+    email: str
+    total_attempts: int
+    graded_attempts: int
+    terminated_attempts: int
+    average_percentage: float | None
+    best_percentage: float | None
+    passed_count: int
+    failed_count: int
+    attempts: list[StudentAttemptRow]
+
+
+@router.get("/api/admin/users/{user_id}/results", response_model=StudentReportResponse)
+def student_report(
+    user_id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(require_admin)
+):
+    """
+    Every attempt one student has made, with a summary on top.
+
+    Percentages rather than raw scores are averaged, because exams have
+    different totals and averaging 8/10 with 40/100 as raw numbers is
+    meaningless.
+    """
+    from app.models.suspicious_event import EventSeverity
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบผู้ใช้นี้")
+
+    attempts = (
+        db.query(ExamAttempt)
+        .options(joinedload(ExamAttempt.exam).joinedload(Exam.subject))
+        .filter(ExamAttempt.user_id == user_id)
+        .order_by(ExamAttempt.started_at.desc())
+        .all()
+    )
+
+    # One grouped query for event counts instead of one query per attempt.
+    from sqlalchemy import func
+
+    counts: dict[tuple, int] = {}
+    if attempts:
+        rows = (
+            db.query(SuspiciousEvent.attempt_id, SuspiciousEvent.severity, func.count(SuspiciousEvent.id))
+            .filter(SuspiciousEvent.attempt_id.in_([a.id for a in attempts]))
+            .group_by(SuspiciousEvent.attempt_id, SuspiciousEvent.severity)
+            .all()
+        )
+        counts = {(attempt_id, severity): n for attempt_id, severity, n in rows}
+
+    totals: dict = {}
+    result_rows: list[StudentAttemptRow] = []
+    percentages: list[float] = []
+    passed_count = failed_count = terminated = 0
+
+    for attempt in attempts:
+        exam = attempt.exam
+        if exam.id not in totals:
+            totals[exam.id] = _total_score_for_exam(db, exam.id)
+        total = totals[exam.id]
+        pass_pct = exam.passing_percentage or 50.0
+
+        pct = None
+        passed = None
+        if attempt.score is not None and total:
+            pct = round(attempt.score / total * 100, 1)
+            passed = pct >= pass_pct
+            percentages.append(pct)
+            if passed:
+                passed_count += 1
+            else:
+                failed_count += 1
+
+        status_value = attempt.status.value if hasattr(attempt.status, "value") else attempt.status
+        if status_value == "terminated":
+            terminated += 1
+
+        result_rows.append(
+            StudentAttemptRow(
+                attempt_id=attempt.id,
+                exam_id=exam.id,
+                exam_title=exam.title,
+                subject_name=exam.subject.name if exam.subject else None,
+                status=status_value,
+                score=attempt.score,
+                total_score=total,
+                percentage=pct,
+                passed=passed,
+                passing_percentage=pass_pct,
+                started_at=attempt.started_at.isoformat(),
+                submitted_at=attempt.submitted_at.isoformat() if attempt.submitted_at else None,
+                terminated_reason=getattr(attempt, "terminated_reason", None),
+                warning_events=counts.get((attempt.id, EventSeverity.WARNING.value), 0),
+                suspicious_events=counts.get((attempt.id, EventSeverity.SUSPICIOUS.value), 0),
+            )
+        )
+
+    return StudentReportResponse(
+        user_id=user.id,
+        name=user.name,
+        email=user.email,
+        total_attempts=len(attempts),
+        graded_attempts=len(percentages),
+        terminated_attempts=terminated,
+        average_percentage=round(sum(percentages) / len(percentages), 1) if percentages else None,
+        best_percentage=max(percentages) if percentages else None,
+        passed_count=passed_count,
+        failed_count=failed_count,
+        attempts=result_rows,
     )

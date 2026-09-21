@@ -31,6 +31,11 @@ export interface HeadPoseConfig {
   warning_duration: number;
   suspicious_duration: number;
   face_check_interval_seconds: number;
+  absence_strike_seconds: number;
+  absence_restart_seconds: number;
+  blink_threshold: number;
+  gaze_away_threshold: number;
+  gaze_away_seconds: number;
 }
 
 /**
@@ -47,6 +52,11 @@ export const DEFAULT_HEAD_POSE_CONFIG: HeadPoseConfig = {
   warning_duration: 3,
   suspicious_duration: 8,
   face_check_interval_seconds: 7,
+  absence_strike_seconds: 5,
+  absence_restart_seconds: 10,
+  blink_threshold: 0.5,
+  gaze_away_threshold: 0.45,
+  gaze_away_seconds: 6,
 };
 
 const RAD_TO_DEG = 180 / Math.PI;

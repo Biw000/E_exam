@@ -20,7 +20,11 @@ interface Options {
    * attempt on the first occurrence instead of only being logged.
    */
   strict?: boolean;
+  /** Strict-mode violations allowed before the attempt ends (from the exam). */
+  violationLimit?: number;
   onViolation?: (eventType: string, description: string) => void;
+  /** Called on every counted strict violation, so the UI can show "1/3". */
+  onViolationCount?: (count: number, limit: number, label: string) => void;
 }
 
 /**
@@ -57,13 +61,18 @@ export function useAntiCheat({
   cooldownMs = 15000,
   blockContextMenu = true,
   strict = false,
+  violationLimit = 1,
   onViolation,
+  onViolationCount,
 }: Options) {
   const lastFired = useRef<Record<string, number>>({});
   const suppressed = useRef<Record<string, number>>({});
   const logRef = useRef(log);
   const violationRef = useRef(onViolation);
+  const countRef = useRef(onViolationCount);
   const strictRef = useRef(strict);
+  const limitRef = useRef(Math.max(1, violationLimit));
+  const violations = useRef(0);
   const firedViolation = useRef(false);
 
   // Counters for ordinary input activity. Reported as a periodic summary
@@ -80,6 +89,12 @@ export function useAntiCheat({
   useEffect(() => {
     strictRef.current = strict;
   }, [strict]);
+  useEffect(() => {
+    limitRef.current = Math.max(1, violationLimit);
+  }, [violationLimit]);
+  useEffect(() => {
+    countRef.current = onViolationCount;
+  }, [onViolationCount]);
 
   /**
    * Rate-limits repeats. Fifty NO_FACE ticks in a row should be one row in the
@@ -116,9 +131,23 @@ export function useAntiCheat({
     (eventType: string, description?: string, metadata?: Record<string, unknown>) => {
       const label = STRICT_VIOLATIONS[eventType];
       if (strictRef.current && label && !firedViolation.current) {
-        firedViolation.current = true;
-        logRef.current(eventType, description, { ...metadata, strict_violation: true });
-        violationRef.current?.(eventType, label);
+        // The exam's violation_limit decides how many are tolerated. The
+        // setting existed in the admin form before this counted anything, so
+        // every strict exam ended on the first violation regardless of it.
+        violations.current += 1;
+        const count = violations.current;
+        const limit = limitRef.current;
+        logRef.current(eventType, description, {
+          ...metadata,
+          strict_violation: true,
+          violation: count,
+          violation_limit: limit,
+        });
+        countRef.current?.(count, limit, label);
+        if (count >= limit) {
+          firedViolation.current = true;
+          violationRef.current?.(eventType, label);
+        }
         return;
       }
       fire(eventType, description, metadata);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getFaceLandmarker } from "@/lib/faceLandmarker";
+import { EyeMetrics, eyesFromBlendshapes } from "@/lib/eyes";
 import {
   DEFAULT_HEAD_POSE_CONFIG,
   HeadPose,
@@ -29,6 +30,9 @@ export interface TrackerFrame {
   faceCount: number;
   pose: HeadPose | null;
   box: FaceBox | null;
+  eyes: EyeMetrics | null;
+  /** performance.now() of this detection, for duration maths. */
+  at: number;
 }
 
 function boxFromLandmarks(landmarks: Array<{ x: number; y: number }>): FaceBox | null {
@@ -145,6 +149,7 @@ export function useFaceTracker({
         let nextState: FaceState;
         let nextPose: HeadPose | null = null;
         let nextBox: FaceBox | null = null;
+        let nextEyes: EyeMetrics | null = null;
 
         if (count === 0) {
           nextState = "NO_FACE";
@@ -157,6 +162,7 @@ export function useFaceTracker({
             nextPose = poseFromMatrix(Array.from(matrix), configRef.current);
           }
           nextBox = boxFromLandmarks(result.faceLandmarks[0]);
+          nextEyes = eyesFromBlendshapes(result.faceBlendshapes?.[0]?.categories);
         }
 
         setState(nextState);
@@ -168,6 +174,8 @@ export function useFaceTracker({
           faceCount: count,
           pose: nextPose,
           box: nextBox,
+          eyes: nextEyes,
+          at: now,
         });
       };
 
