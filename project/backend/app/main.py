@@ -30,6 +30,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Without this the browser hides Content-Disposition from JavaScript, so a
+    # fetch-based download cannot read the filename the server chose.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(auth.router)

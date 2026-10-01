@@ -11,8 +11,10 @@ quote or newline inside a question or a description cannot break the columns.
 """
 import csv
 import io
+import re
 import uuid
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -39,18 +41,37 @@ def _csv_response(filename: str, header: list[str], rows: list[list]) -> Streami
         writer.writerow(["" if v is None else v for v in row])
     buffer.seek(0)
 
-    # RFC 5987 encoding so a Thai filename survives the HTTP header.
-    quoted = filename.encode("utf-8").decode("latin-1", "ignore")
+    # HTTP headers are latin-1 only. A Thai filename has to be percent-encoded
+    # for the RFC 5987 form, and the plain `filename=` form needs an ASCII
+    # fallback, otherwise the server raises while writing the header and the
+    # browser reports the request as a network failure with no explanation.
+    ascii_name = _ascii_filename(filename)
+    rfc5987 = quote(filename, safe="")
     return StreamingResponse(
         iter([buffer.getvalue()]),
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": (
-                f"attachment; filename=\"{quoted}\"; "
-                f"filename*=UTF-8''{filename.replace(' ', '%20')}"
+                f'attachment; filename="{ascii_name}"; '
+                f"filename*=UTF-8''{rfc5987}"
             )
         },
     )
+
+
+def _ascii_filename(filename: str) -> str:
+    """
+    ASCII-only fallback for clients that ignore the RFC 5987 form.
+
+    Non-ASCII characters are dropped rather than transliterated, so a fully
+    Thai name could collapse to just the extension; the guard below keeps a
+    usable name in that case.
+    """
+    cleaned = "".join(c if 32 < ord(c) < 127 and c not in '"\\' else "_" for c in filename)
+    cleaned = re.sub(r"_+", "-", cleaned).strip("-_ ") or "export.csv"
+    if not cleaned.lower().endswith(".csv"):
+        cleaned += ".csv"
+    return cleaned
 
 
 def _stamp() -> str:

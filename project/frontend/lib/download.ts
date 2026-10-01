@@ -68,7 +68,17 @@ export async function downloadCsv(path: string, fallbackName: string): Promise<s
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, { headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { headers });
+  } catch {
+    // fetch only throws for network-level failures, which on this deployment
+    // nearly always means the free instance went back to sleep between clicks.
+    throw new Error(
+      "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ เซิร์ฟเวอร์อาจกำลังเริ่มทำงานใหม่ กรุณารอสักครู่แล้วลองอีกครั้ง"
+    );
+  }
+
   if (!res.ok) {
     let detail = res.statusText;
     try {
