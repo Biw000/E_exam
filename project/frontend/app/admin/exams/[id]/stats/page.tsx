@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import DonutChart from "@/components/DonutChart";
+import ExportButtons from "@/components/ExportButtons";
 import { api, ApiError } from "@/lib/api";
 import { ExamStats } from "@/types";
 
@@ -53,6 +54,21 @@ export default function ExamStatsPage() {
             เกณฑ์ผ่าน {stats.passing_percentage}%
           </p>
         </div>
+
+        <ExportButtons
+          items={[
+            {
+              label: "คะแนนผู้เข้าสอบ (CSV)",
+              path: `/api/admin/exams/${id}/results.csv`,
+              filename: "results.csv",
+            },
+            {
+              label: "บันทึกเหตุการณ์ทั้งข้อสอบ (CSV)",
+              path: `/api/admin/exams/${id}/events.csv`,
+              filename: "events.csv",
+            },
+          ]}
+        />
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard

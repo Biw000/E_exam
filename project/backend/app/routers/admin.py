@@ -180,3 +180,19 @@ def alerts(
         )
         for event, attempt, user, exam in rows
     ]
+
+
+class FaceProviderStatus(BaseModel):
+    provider: str
+    detail: dict
+
+
+@router.get("/face-provider", response_model=FaceProviderStatus)
+def face_provider_status(admin: User = Depends(require_admin)):
+    """
+    Which face engine is running, for the admin page. Deliberately reports the
+    endpoint and whether a key is set, never the key itself.
+    """
+    from app.services import face_service
+
+    return FaceProviderStatus(provider=face_service.provider_name(), detail=face_service.provider_health())

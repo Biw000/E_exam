@@ -16,6 +16,23 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # ------------------------------------------------------------------
+    # Face engine selection.
+    #   local (default) - MediaPipe running inside this process
+    #   api             - an external HTTP service (see face_providers/remote.py)
+    # Switching providers invalidates every enrolled face, because embeddings
+    # from different models are not comparable. Plan a re-enrolment first.
+    # ------------------------------------------------------------------
+    FACE_PROVIDER: str = "local"
+    FACE_API_URL: str = ""
+    FACE_API_KEY: str = ""
+    FACE_API_TIMEOUT: float = 8.0
+    # Ask the API for the distance too, instead of cosine on the returned vectors.
+    FACE_API_USE_REMOTE_COMPARE: bool = False
+    # If the API cannot be reached at start-up, run locally rather than refuse
+    # to serve at all.
+    FACE_API_FALLBACK_TO_LOCAL: bool = True
+
     FACE_MATCH_THRESHOLD: float = 0.6
     FACE_CHECK_INTERVAL_SECONDS: int = 7
 

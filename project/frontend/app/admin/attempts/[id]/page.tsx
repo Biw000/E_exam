@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
+import ExportButtons from "@/components/ExportButtons";
 import { api } from "@/lib/api";
 import { EventSeverity, SuspiciousEvent } from "@/types";
 import { formatDateTime } from "@/lib/datetime";
@@ -84,6 +85,16 @@ export default function AdminAttemptEventsPage() {
             กรุณาใช้ประกอบการพิจารณาเท่านั้น
           </p>
         </div>
+
+        <ExportButtons
+          items={[
+            {
+              label: "บันทึกเหตุการณ์ของการสอบครั้งนี้ (CSV)",
+              path: `/api/admin/attempts/${id}/events.csv`,
+              filename: "events.csv",
+            },
+          ]}
+        />
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {(["INFO", "WARNING", "SUSPICIOUS"] as EventSeverity[]).map((sev) => (

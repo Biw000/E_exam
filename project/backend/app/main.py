@@ -14,6 +14,7 @@ from app.routers import (
     anti_cheat,
     results,
     admin,
+    exports,
 )
 
 # Create tables on startup if they don't exist yet. For a 4-day MVP this
@@ -40,6 +41,7 @@ app.include_router(attempts.router)
 app.include_router(anti_cheat.router)
 app.include_router(results.router)
 app.include_router(admin.router)
+app.include_router(exports.router)
 
 
 @app.get("/health")

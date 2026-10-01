@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import DonutChart from "@/components/DonutChart";
+import ExportButtons from "@/components/ExportButtons";
 import { api, ApiError } from "@/lib/api";
 import { formatDateTime } from "@/lib/datetime";
 import { StudentReport } from "@/types";
@@ -66,6 +67,21 @@ export default function StudentReportPage() {
           <h1 className="mt-2 text-2xl font-bold">{report.name}</h1>
           <p className="text-sm text-slate-500">{report.email}</p>
         </div>
+
+        <ExportButtons
+          items={[
+            {
+              label: "ประวัติการสอบ (CSV)",
+              path: `/api/admin/users/${id}/results.csv`,
+              filename: "results.csv",
+            },
+            {
+              label: "บันทึกเหตุการณ์ทั้งหมด (CSV)",
+              path: `/api/admin/users/${id}/events.csv`,
+              filename: "events.csv",
+            },
+          ]}
+        />
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat
